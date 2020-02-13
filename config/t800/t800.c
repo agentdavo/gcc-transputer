@@ -1363,14 +1363,29 @@ rtx
 t800_temp_slot (mode)
     enum machine_mode mode;
 {
+  extern int virtuals_instantiated;  /* from function.c */
+
   if (t800_temp_slots[mode] == NULL_RTX)
     {
       if (t800_temp_slots[WIDEST_MODE] == NULL_RTX)
         t800_temp_slots[WIDEST_MODE] =
           assign_stack_local (WIDEST_MODE, GET_MODE_SIZE (WIDEST_MODE), 0);
-      t800_temp_slots[mode] =
-        gen_rtx (MEM, mode, XEXP (t800_temp_slots[WIDEST_MODE], 0));
+      if (mode != WIDEST_MODE)
+	t800_temp_slots[mode] =
+	  gen_rtx (MEM, mode, XEXP (t800_temp_slots[WIDEST_MODE], 0));
     }
+
+  /* If we allocated the slot in the RTL generation phase,
+     assign_stack_local have used virtual frame pointer in the slot
+     address.  If we are called after instantiation (eg during reload)
+     returning the slot with such an address is not legal, since the
+     slot would be used as is and never instantiated.  So make sure
+     any virtuals in the slot's address are instantiated.  */
+  else if (virtuals_instantiated)
+    {
+      instantiate_decl (t800_temp_slots[mode], GET_MODE_SIZE (mode), 1);
+    }
+
   return t800_temp_slots[mode];
 }
 

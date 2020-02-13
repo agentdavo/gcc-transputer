@@ -1,1 +1,1 @@
-char *version_string = "2.7.2-t800.6";
+char *version_string = "2.7.2-t800.7";
