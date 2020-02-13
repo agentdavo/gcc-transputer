@@ -39,6 +39,7 @@ Boston, MA 02111-1307, USA.  */
 rtx force_ABCreg PROTO((enum machine_mode, rtx));
 rtx my_emit_jump_insn PROTO((rtx, rtx));
 int t800_expand_compare PROTO((enum rtx_code, rtx *));
+static int is_offset PROTO((rtx op));
 int t800_dataseg_symrefs_mentioned_p PROTO((rtx));
 static void t800_output_addr_const PROTO((FILE *, rtx, int));
 static void assert_sane_reg PROTO((rtx));
@@ -68,6 +69,10 @@ char register_move_cost[FIRST_PSEUDO_REGISTER][FIRST_PSEUDO_REGISTER] = {
   { 2,  2,  2, 14, 14, 14,  2,  2,  2},     /*R_FAKE2*/
 };
 
+/* Stored by output__my_fancy_tablejump, checked by ASM_OUTPUT_ADDR_DIFF_ELT
+   to make sure that table_rel_label has not been optimized away. */
+
+int t800_expected_table_label;
 
 
 /************************************************************
@@ -603,6 +608,51 @@ adc_operand (op, mode)
   return 0;
 }
 
+/* Return 1 if OP is a symbolic offset expression, such as
+   (CONST (MINUS L1 L2)) */
+
+int
+const_offset_operand (op, mode)
+     register rtx op;
+     enum machine_mode mode;
+{
+  if (mode != VOIDmode && GET_MODE (op) != mode)
+    return 0;
+
+  if (GET_CODE (op) != CONST)
+    return 0;
+
+  return is_offset (XEXP (op,0));
+}
+
+/* Helper routine for const_offset_operand.  Given a CONST body,
+   return 1 if it is of int type (e.g. L1-L2), return 0 if it is of
+   pointer type (e.g. L1+5) */
+
+static int
+is_offset (op)
+     register rtx op;
+{
+  switch (GET_CODE (op))
+    {
+    case PLUS:
+      return is_offset (XEXP (op, 0)) && is_offset (XEXP (op, 0));
+
+    case MINUS:
+      return is_offset (XEXP (op, 0)) == is_offset (XEXP (op, 0));
+
+    case CONST_INT:
+      return 1;
+
+    case LABEL_REF:
+    case SYMBOL_REF:
+      return 0;
+
+    default:
+      abort ();
+    }
+}
+
 
 /* Return 1 if OP is a valid operand for ldpi instruction, ie. is a
    program-counter-relative address.  */
@@ -618,8 +668,17 @@ ldpi_operand (op, mode)
   if (GET_CODE (op) == LABEL_REF)
     return 1;
 
-  /* If data segment is pc-relative, all SYMBOL_REF's are OK and so
-     are CONST's, no matter what they contain.  */
+  /* Int type CONST's (e.g L1-L2) are not acceptable for ldpi -- we
+     don't want to let ldpi add PC to them! */
+
+  if (GET_CODE (op) == CONST && const_offset_operand (op, mode))
+    return 0;
+  
+  /* If data segment is pc-relative, all SYMBOL_REF's are OK; but if
+     data segment is addressed by pointer, we don't want to use ldpi
+     for loading data segment addresses, so reject data segment
+     SYMBOL_REF's.  (ENCODE_SECTION_INFO marks data segment SYMREF's
+     with `1' in SYMBOL_REF_FLAG) */
 
   if (TARGET_DATASEG_PC_RELATIVE)
     return (GET_CODE (op) == SYMBOL_REF || GET_CODE (op) == CONST);
@@ -637,6 +696,7 @@ ldpi_operand (op, mode)
       if (GET_CODE (op) == CONST)
 	return ! t800_dataseg_symrefs_mentioned_p (op);
     }
+
   return 0;
 }
 

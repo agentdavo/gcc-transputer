@@ -1081,25 +1081,21 @@ bss_section ()							\
 /* Note: the following two should generate the same labels as
    ASM_OUTPUT_INTERNAL_LABEL (stream, "L", value), sans trailing ":\n".
    Definitions for those in defaults.h are currently unusable because
-   they use ASM_OUTPUT_INTERNAL_LABEL, and ":\n" it appends confuse
+   they use ASM_OUTPUT_INTERNAL_LABEL, and ":\n" it appends confuses
    assemblers. */
 
 #undef ASM_OUTPUT_ADDR_DIFF_ELT
-#define ASM_OUTPUT_ADDR_DIFF_ELT(stream, value, rel) \
-  fprintf (stream, "\t.word\t.LL%u-.LL%u\n", value, rel)
+#define ASM_OUTPUT_ADDR_DIFF_ELT(STREAM, VALUE, REL) \
+  do {								\
+    extern int t800_expected_table_label;			\
+								\
+    if ((REL) == t800_expected_table_label)			\
+      fprintf (STREAM, "\t.word\t.LL%u-.LL%ua\n", VALUE, REL);  \
+  } while (0)
 
-#undef ASM_OUTPUT_ADDR_VEC_ELT
-#define ASM_OUTPUT_ADDR_VEC_ELT(stream, value) \
-  fprintf (stream, "\t.word\t.LL%u\n", value)
-
-/* Looks like we don't need any special assembler syntax for switch
-   tables, so leave those two undefined */
-
-#undef ASM_OUTPUT_CASE_LABEL
-/* #define ASM_OUTPUT_CASE_LABEL(stream, prefix, num, table) */
-
-#undef ASM_OUTPUT_CASE_END
-/* #define ASM_OUTPUT_CASE_END(stream, num, table) */
+/*>-#define ASM_OUTPUT_ADDR_VEC_ELT(stream, value) */
+/*>#define ASM_OUTPUT_CASE_LABEL(FILE, PREFIX, NUM, TABLE) */
+/*>-#define ASM_OUTPUT_CASE_END(stream, num, table) */
 
 
 /*** Assembler Commands for Alignment **********************/

@@ -43,7 +43,7 @@ Boston, MA 02111-1307, USA.  */
 
    (a) By default, the inputs are non-popped. If the insn pops some
    input, its pattern should either have a popped_reg attribute
-   (for normal insns) or contain a clobber for this input (for ASMs).
+   (for normal insns) or contain a `P' constraint (for ASMs).
 
    (b) By default, outputs are pushed. For output to be non-pushed,
    there should exist a non-popped input constrained to match this

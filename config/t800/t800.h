@@ -1391,20 +1391,28 @@ bss_section ()							\
 /* This macro is called just after making RTX for data object whose
    declaration is DECL.  We use it to mark SYMBOL_REF with `1' in
    SYMBOL_REF_FLAG if is belongs to data segment, `0' if it is in text
-   segment.  This info is useful in dataseg-by-pointer model; see
-   t800_legitimize_address for details.  */
+   segment.  This info is useful in dataseg-by-pointer model; see movM
+   patterns for details.  */
 
-#define ENCODE_SECTION_INFO(decl) \
+#define ENCODE_SECTION_INFO(decl)					\
   do {									\
-    if (TREE_CODE (decl) == VAR_DECL)					\
-      SYMBOL_REF_FLAG (XEXP (DECL_RTL (decl), 0)) = 1;			\
-    else if (TREE_CODE (decl) == FUNCTION_DECL)				\
-      SYMBOL_REF_FLAG (XEXP (DECL_RTL (decl), 0)) = 0;			\
-    else if (TREE_CODE (decl) == STRING_CST				\
-             && ! flag_writable_strings)				\
-      SYMBOL_REF_FLAG (XEXP (TREE_CST_RTL (decl), 0)) = 0;		\
-    else								\
-      SYMBOL_REF_FLAG (XEXP (TREE_CST_RTL (decl), 0)) = 1;		\
+    int data_symbol;                                                    \
+                                                                        \
+    if (TREE_CODE (decl) == FUNCTION_DECL)                              \
+      data_symbol = 0;                                                  \
+    else if (TREE_CODE (decl) == STRING_CST && flag_writable_strings)	\
+      data_symbol = 1;                                                  \
+    else if (TREE_CONSTANT (decl))                                      \
+      data_symbol = 0;                                                  \
+    else                                                                \
+      data_symbol = 1;                                                  \
+                                                                        \
+    if (data_symbol)                                                    \
+      {                                                                 \
+        rtx rtl = (TREE_CODE_CLASS (TREE_CODE (decl)) != 'd'		\
+                   ? TREE_CST_RTL (decl) : DECL_RTL (decl));		\
+        SYMBOL_REF_FLAG (XEXP (rtl, 0)) = 1;				\
+      }                                                                 \
   } while (0)
 
 /* #define STRIP_NAME_ENCODING (@var{var}, @var{sym_name}) */
@@ -1482,8 +1490,9 @@ bss_section ()							\
    putc ('\n', STREAM))
 
 #define ASM_OUTPUT_SHORT(STREAM, EXP) \
-  (GET_CODE (EXP) == CONST_INT                          \
-    ? fprintf (STREAM, "\t.word %u\n", INTVAL (EXP))    \
+  (GET_CODE (EXP) == CONST_INT                          		\
+    ? fprintf (STREAM, TARGET_SHORT16? "\t.half %u\n": "\t.word %u\n",	\
+	       INTVAL (EXP))    					\
     : (abort (),0))
 
 #define ASM_OUTPUT_CHAR(STREAM, EXP) \
@@ -1683,10 +1692,15 @@ bss_section ()							\
 /*** Output of Dispatch Tables ******************************/
 
 #define ASM_OUTPUT_ADDR_DIFF_ELT(STREAM, VALUE, REL) \
-  fprintf (STREAM, "\t.word L@%u-L@%u\n", VALUE, REL);
+  do {								\
+    extern int t800_expected_table_label;			\
+								\
+    if ((REL) == t800_expected_table_label)			\
+      fprintf (STREAM, "\t.word L@%u-L@%ua\n", VALUE, REL);	\
+  } while (0)
 
 #define ASM_OUTPUT_ADDR_VEC_ELT(STREAM, VALUE) \
-  abort ()
+  abort ();
 
 #define ASM_OUTPUT_CASE_LABEL(FILE, PREFIX, NUM, TABLE) \
   do {								\
