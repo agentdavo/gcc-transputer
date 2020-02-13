@@ -695,14 +695,15 @@ special things you must know:
      GNU systems.  This configuration is being superseded.  You must use
      gas/binutils version 2.5.2 or later.
 
-`i386-*-linuxlibc1'
+`i386-*-linux-gnulibc1'
      Use this configuration to generate ELF binaries on Linux-based GNU
-     systems using GNU libc version 1 (Linux libc version 5).  You must
-     use gas/binutils version 2.5.2 or later.
+     systems using the Linux libc version 5.  You must use gas/binutils
+     version 2.5.2 or later.
 
 `i386-*-linux'
      Use this configuration to generate ELF binaries on Linux-based GNU
-     systems.  You must use gas/binutils version 2.5.2 or later.
+     systems using glibc 2.  You must use gas/binutils version 2.8.1 or
+     later.
 
 `i386-*-sco'
      Compilation with RCC is recommended.  Also, it may be a good idea
@@ -812,6 +813,21 @@ special things you must know:
      HP 9000 series 200 running BSD.  Note that the C compiler that
      comes with this system cannot compile GNU CC; contact
      `law@cs.utah.edu' to get binaries of GNU CC for bootstrapping.
+
+`m68k-*-linuxaout'
+     Use this configuration to generate a.out binaries on Linux. This
+     configuration is being superseded. You must use gas/binutils
+     version 2.5.2 or later.
+
+`m68k-*-linux-gnulibc1'
+     Use this configuration to generate ELF binaries on Linux with the
+     Linux C library 5.x.x. You must use gas/binutils version 2.8.1
+     later.
+
+`m68k-*-linux'
+     Use this configuration to generate ELF binaries on Linux-based GNU
+     systems with the GNU C library 2. You must use gas/binutils version
+     2.8.1 or later.
 
 `m68k-altos'
      Altos 3068.  You must use the GNU assembler, linker and debugger.

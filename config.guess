@@ -331,9 +331,8 @@ EOF
 	  # Either a pre-BFD a.out linker (linuxoldld) or one that does not give us
 	  # useful --help.  Gcc wants to distinguish between linuxoldld and linuxaout,
 	  # and between different C library versions.
-	  test ! -d /usr/lib/ldscripts/. \
-	    && test ! -d /usr/*-*-linux*/lib/ldscripts \
-	    && echo "${UNAME_MACHINE}-unknown-linuxoldld" && exit 0
+	  echo "$ld_help_string" | grep >/dev/null 2>&1 "supported emulations:"
+	  test $? != 0 && echo "${UNAME_MACHINE}-pc-linux-gnuoldld" && exit 0
 	  # Determine whether the default compiler is a.out or elf
 	  cat >dummy.c <<EOF
 #include <features.h>
@@ -346,10 +345,10 @@ char *argv[];
 #  if __GLIBC__ >= 2
     printf ("%s-unknown-linux\n", argv[1]);
 #  else
-    printf ("%s-unknown-linuxlibc1\n", argv[1]);
+    printf ("%s-unknown-linux-gnulibc1\n", argv[1]);
 #  endif
 # else
-   printf ("%s-unknown-linuxlibc1\n", argv[1]);
+   printf ("%s-unknown-linux-gnulibc1\n", argv[1]);
 # endif
 #else
   printf ("%s-unknown-linuxaout\n", argv[1]);

@@ -31,6 +31,11 @@ Boston, MA 02111-1307, USA.  */
 /* 68020 with 68881 */
 #define TARGET_DEFAULT 7
 
+/* for 68k machines this only needs to be TRUE for the 68000 */
+
+#undef STRICT_ALIGNMENT     
+#define STRICT_ALIGNMENT 0
+
 #undef SUBTARGET_SWITCHES
 #define SUBTARGET_SWITCHES	{"ieee-fp", 0},
 
@@ -102,6 +107,7 @@ Boston, MA 02111-1307, USA.  */
   "-D__ELF__ -Dunix -Dmc68000 -Dmc68020 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(m68k) -Amachine(m68k)"
 
 #undef CPP_SPEC
+#ifdef USE_GNULIBC_1
 #if TARGET_DEFAULT & 2
 #define CPP_SPEC \
   "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
@@ -109,8 +115,21 @@ Boston, MA 02111-1307, USA.  */
 #define CPP_SPEC \
   "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
 #endif
+#else /* not USE_GNULIBC_1 */
+#if TARGET_DEFAULT & 2
+#define CPP_SPEC \
+  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+#else
+#define CPP_SPEC \
+  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+#endif
+#endif
+
+#undef LIBGCC_SPEC
+#define LIBGCC_SPEC "-lgcc"
 
 #undef	LIB_SPEC
+#ifdef USE_GNULIBC_1
 #if 1
 /* We no longer link with libc_p.a or libg.a by default.  If you want
    to profile or debug the Linux C library, please add -lc_p or -ggdb
@@ -124,6 +143,11 @@ Boston, MA 02111-1307, USA.  */
      %{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
      %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}}}"
 #endif
+#else
+#define LIB_SPEC \
+  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
+	%{profile:-lc_p} %{!profile: -lc}}"
+#endif /* not USE_GNULIBC_1 */
 
 /* Provide a LINK_SPEC appropriate for Linux.  Here we provide support
    for the special GCC options -static and -shared, which allow us to
@@ -142,6 +166,7 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf. */
 
 #undef	LINK_SPEC
+#ifdef USE_GNULIBC_1
 #ifndef LINUX_DEFAULT_ELF
 #define LINK_SPEC "-m m68kelf %{shared} %{symbolic:-shared -Bsymbolic} \
   %{!shared:%{!symbolic: \
@@ -157,6 +182,15 @@ Boston, MA 02111-1307, USA.  */
       %{!dynamic-linker*:-dynamic-linker /lib/ld-linux.so.1}} \
     %{static}}}"
 #endif
+#else /* not USE_GNULIBC_1 */
+#define LINK_SPEC "-m m68kelf %{shared} \
+  %{!shared: \
+    %{!static: \
+      %{rdynamic:-export-dynamic} \
+      %{!dynamic-linker*:-dynamic-linker /lib/ld.so.1}} \
+    %{static}}"
+#endif /* not USE_GNULIBC_1 */
+
 
 /* For compatibility with linux/a.out */
 
@@ -259,7 +293,8 @@ do {									\
 
 #undef LIBCALL_VALUE
 #define LIBCALL_VALUE(MODE)						\
-  (((MODE) == SFmode || (MODE) == DFmode) && TARGET_68881		\
+  ((((MODE) == SFmode || (MODE) == DFmode || (MODE) == XFmode)		\
+    && TARGET_68881)							\
    ? gen_rtx (REG, (MODE), 16)						\
    : gen_rtx (REG, (MODE), 0))
 
@@ -267,7 +302,10 @@ do {									\
    an operand of a function call. */
 #undef LEGITIMATE_PIC_OPERAND_P
 #define LEGITIMATE_PIC_OPERAND_P(X) \
-  (! symbolic_operand (X, VOIDmode) \
+  ((! symbolic_operand (X, VOIDmode) \
+    && ! (GET_CODE (X) == CONST_DOUBLE && CONST_DOUBLE_MEM (X)	\
+	  && GET_CODE (CONST_DOUBLE_MEM (X)) == MEM		\
+	  && symbolic_operand (XEXP (CONST_DOUBLE_MEM (X), 0), VOIDmode))) \
    || (GET_CODE (X) == SYMBOL_REF && SYMBOL_REF_FLAG (X)))
 
 /* Turn off function cse if we are doing PIC. We always want function
@@ -283,3 +321,38 @@ do {									\
    technique. */
 #undef PCC_STATIC_STRUCT_RETURN
 #define DEFAULT_PCC_STRUCT_RETURN 0
+
+/* Finalize the trampoline by flushing the insn cache.  */
+
+#undef FINALIZE_TRAMPOLINE
+#define FINALIZE_TRAMPOLINE(TRAMP)					\
+  emit_library_call (gen_rtx (SYMBOL_REF, Pmode, "__clear_cache"),	\
+		     0, VOIDmode, 2, TRAMP, Pmode,			\
+		     plus_constant (TRAMP, TRAMPOLINE_SIZE), Pmode);
+
+/* Clear the instruction cache from `beg' to `end'.  This makes an
+   inline system call to SYS_cacheflush.  The arguments are as
+   follows:
+
+	cacheflush (addr, scope, cache, len)
+
+   addr	  - the start address for the flush
+   scope  - the scope of the flush (see the cpush insn)
+   cache  - which cache to flush (see the cpush insn)
+   len    - a factor relating to the number of flushes to perform:
+   	    len/16 lines, or len/4096 pages.  */
+
+#define CLEAR_INSN_CACHE(BEG, END)					\
+{									\
+  register unsigned long _beg __asm ("%d1") = (unsigned long) (BEG);	\
+  unsigned long _end = (unsigned long) (END);				\
+  register unsigned long _len __asm ("%d4") = (_end - _beg + 32);	\
+  __asm __volatile							\
+    ("move%.l %#123, %/d0\n\t"	/* system call nr */			\
+     "move%.l %#1, %/d2\n\t"	/* clear lines */			\
+     "move%.l %#3, %/d3\n\t"	/* insn+data caches */			\
+     "trap %#0"								\
+     : /* no outputs */							\
+     : "d" (_beg), "d" (_len)						\
+     : "%d0", "%d2", "%d3");						\
+}
