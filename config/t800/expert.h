@@ -935,29 +935,33 @@ bss_section ()							\
 /*** Output of Uninitialized Variables *********************/
 
 #undef ASM_OUTPUT_COMMON
-#define ASM_OUTPUT_COMMON(stream, name, size, rounded) \
-  do {							\
-    fprintf (stream, "\t.comm ");			\
-    assemble_name (stream, name);			\
-    fprintf (stream, ",%u\n", rounded);			\
-  } while (0)
+/* #define ASM_OUTPUT_COMMON(stream, name, size, rounded) */
 
 #undef ASM_OUTPUT_ALIGNED_COMMON
-/* #define ASM_OUTPUT_ALIGNED_COMMON (stream, name, size, alignment) */
+#define ASM_OUTPUT_ALIGNED_COMMON (STREAM, NAME, SIZE, ALIGNMENT) \
+  do {									\
+    if ((ALIGNMENT) > BITS_PER_UNIT)					\
+      fprintf (STREAM, "\t.align %u\n", (ALIGNMENT)/BITS_PER_UNIT);	\
+    fprintf (STREAM, "\t.comm ");					\
+    assemble_name (STREAM, NAME);					\
+    fprintf (STREAM, ",%u\n", SIZE);					\
+  } while (0)
 
 #undef ASM_OUTPUT_SHARED_COMMON
 /* #define ASM_OUTPUT_SHARED_COMMON (stream, name, size, rounded) */
 
 #undef ASM_OUTPUT_LOCAL
-#define ASM_OUTPUT_LOCAL(stream, name, size, rounded) \
-  do {							\
-    bss_section ();					\
-    assemble_name (stream, name);			\
-    fprintf (stream, ":\n\t.space %u\n", rounded);	\
-  } while (0)
+/* #define ASM_OUTPUT_LOCAL(stream, name, size, rounded) */
 
 #undef ASM_OUTPUT_ALIGNED_LOCAL
-/* #define ASM_OUTPUT_ALIGNED_LOCAL (stream, name, size, alignment) */
+#define ASM_OUTPUT_ALIGNED_LOCAL (STREAM, NAME, SIZE, ALIGNMENT) \
+  do {									\
+    bss_section ();							\
+    if ((ALIGNMENT) > BITS_PER_UNIT)					\
+      fprintf (STREAM, "\t.align %u\n", (ALIGNMENT)/BITS_PER_UNIT); 	\
+    assemble_name (STREAM, NAME);					\
+    fprintf (STREAM, ":\n\t.space %u\n", SIZE);				\
+  } while (0)
 
 #undef ASM_OUTPUT_SHARED_LOCAL
 /* #define ASM_OUTPUT_SHARED_LOCAL (stream, name, size, rounded) */

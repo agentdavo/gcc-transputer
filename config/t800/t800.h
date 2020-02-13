@@ -65,7 +65,7 @@ Boston, MA 02111-1307, USA.  */
 
 extern int target_flags;
 
-/* Debugging enable cmpqi pattern */
+/* Debugging: enable cmpqi pattern */
 
 #define MASK_USE_cmpqi	(000000000001)
 #define TARGET_USE_cmpqi   (target_flags & MASK_USE_cmpqi)
@@ -524,32 +524,18 @@ enum reg_class
    we don't need a scratch only if X is a hard reg.
    ... of if X is an (easy) constant.  */
 
-#if 1
 #define SECONDARY_RELOAD_CLASS(CLASS, MODE, X) \
   ((t800_fp_class (CLASS)					\
     && (X) != CONST0_RTX (GET_MODE (X))				\
     && ((unsigned) true_regnum(X) >= FIRST_PSEUDO_REGISTER	\
         || ABCreg_operand (X, MODE)))				\
    ? GENERAL_REGS : NO_REGS)
-#else
-#define SECONDARY_INPUT_RELOAD_CLASS(CLASS, MODE, X) \
-  (t800_fp_class (CLASS)                                        \
-   && (unsigned) true_regnum(X) >= FIRST_PSEUDO_REGISTER        \
-        ? GENERAL_REGS                                          \
-        : NO_REGS)
 
-#define SECONDARY_OUTPUT_RELOAD_CLASS(CLASS, MODE, X) \
-  ((/*(MODE) == QImode ||*/ t800_fp_class (CLASS))                  \
-    && (unsigned) true_regnum(X) >= FIRST_PSEUDO_REGISTER       \
-        ? GENERAL_REGS                                          \
-        : NO_REGS)
-#endif
-
-#if 0 /* Although we need secondary memory for copying between gereral
+#if 0 /* Although we need secondary memory for copying between general
 	 and fp registers, we don't define this, since standard
 	 handling of secondary memory reloads doesn't expect that
 	 moving between fp registers and stack slots used as secondary
-	 memory int turn requires a scratch general register.  Instead,
+	 memory in turn requires a scratch general register.  Instead,
 	 we handle such moves ourselves in reload_{in,out}*.  */
 
 /* Copying between floating and any other reg requires an intermediate
@@ -1403,21 +1389,24 @@ bss_section ()							\
 
 /*** Output of Uninitialized Variables **********************/
 
-#define ASM_OUTPUT_COMMON(STREAM, NAME, SIZE, ROUNDED) \
+/* #define ASM_OUTPUT_COMMON(STREAM, NAME, SIZE, ROUNDED) */
+
+#define ASM_OUTPUT_ALIGNED_COMMON(STREAM, NAME, SIZE, ALIGNMENT) \
   do {                                                              \
+    if ((ALIGNMENT) > BITS_PER_UNIT)				    \
+      fprintf (STREAM, "\t.align %u\n", (ALIGNMENT)/BITS_PER_UNIT); \
     fprintf (STREAM, ".comm ");                                     \
     assemble_name (STREAM, NAME);                                   \
     fprintf (STREAM, ", %u;\n", SIZE);                              \
   } while (0)
 
-/* #define ASM_OUTPUT_ALIGNED_COMMON(STREAM, NAME, SIZE, ALIGNMENT) */
 /* #define ASM_OUTPUT_SHARED_COMMON(STREAM, NAME, SIZE, ROUNDED) */
 /* #define ASM_OUTPUT_LOCAL(STREAM, NAME, SIZE, ROUNDED) */
 
 #define ASM_OUTPUT_ALIGNED_LOCAL(STREAM, NAME, SIZE, ALIGNMENT) \
   do {                                                              \
     bss_section ();                                                 \
-    if ((ALIGNMENT) > 1)                                            \
+    if ((ALIGNMENT) > BITS_PER_UNIT)				    \
       fprintf (STREAM, "\t.align %u\n", (ALIGNMENT)/BITS_PER_UNIT); \
     ASM_OUTPUT_LABEL (STREAM, NAME);                                \
     fprintf (STREAM, "\t.byte ?[%u]\n", SIZE);                      \
@@ -1955,6 +1944,18 @@ extern int t800_init_once_completed;
       }									\
     return "ret";							\
  }
+
+/* Tell code in expand_asm_operands() always to get output in a
+   register (copy through an intermediate location, if nec.), provided
+   the output operand's constraints allow a register.  Otherwise the
+   asm may wind up requiring reload to a nonlocal variable, which is
+   hard to handle because store instruction pop the address of the
+   variable -- which is likely to be required for a later insn, which
+   gets unhappy in the reg-stack pass.  */
+
+#define ASM_OUTPUT_PREDICATE(X, MODE) \
+  (ABCreg_operand (X, MODE) || FABCreg_operand (X, MODE))
+
 
 /* Prototypes for functions in t800.c */
 

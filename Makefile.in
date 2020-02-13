@@ -2268,6 +2268,25 @@ TAGS: force
 	mv temp/* .;							\
 	rmdir temp
 
+# Make tags table including symbols from machine-dependent files for
+# the machine currently configured.
+fullTAGS: force
+	if [ `pwd` = `cd $(srcdir); pwd` ]; then			\
+	  machdeps="$(tm_file) $(out_file)";				\
+	else								\
+	  machdeps="";							\
+	  machdeps="$$machdeps "`pwd`/$(tm_file);			\
+	  machdeps="$$machdeps "`pwd`/*.h;				\
+	  machdeps="$$machdeps "`pwd`/$(out_file);			\
+	  machdeps="$$machdeps "`pwd`/*.c;				\
+	fi;								\
+	cd $(srcdir);							\
+	mkdir temp;							\
+	mv -f c-parse.[ch] objc-parse.c cexp.c =*.[chy] temp;		\
+	etags *.y *.h *.c $$machdeps;			 		\
+	mv temp/* .;							\
+	rmdir temp
+
 # Create the distribution tar file.
 #dist: gcc-$(version).tar.gz
 dist: gcc.xtar.gz

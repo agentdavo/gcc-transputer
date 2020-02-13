@@ -57,7 +57,8 @@ Random examples of inline assembly usage
   get_timer ()
   {
       int tmp;
-      asm ("ldtimer"
+      asm volatile
+          ("ldtimer"
 	   : "=a" (tmp)
 	   : /* no inputs */ );
       return tmp;
@@ -77,7 +78,8 @@ Another example:
   void
   outword (unsigned word, unsigned chan)
   {
-    asm ("outword"
+    asm volatile
+	("outword"
          : /* no outputs */
          : "bP" (chan), "aP" (word)
          : "Creg", "FAreg", "FBreg", "FCreg", "Wreg[0]");
@@ -116,7 +118,7 @@ Yet another example:
 This asm pops its input off floating reg-stack, and pushes the result
 back onto the floating reg-stack.
 
-And, finally, one more example from real life.
+One more example from real life:
 
   static inline int
   lit_load_in_byte (void)
@@ -124,8 +126,8 @@ And, finally, one more example from real life.
       int tmp = 0;
       extern int boot_link_in;
   
-      asm __volatile
-  	("in"
+      asm volatile
+          ("in"
            : /* no outputs */
            : "cP" (&tmp),
              "bP" (boot_link_in),
@@ -146,6 +148,44 @@ always return 0.
 Note that the order of input operands in asms matters: supplying the
 operands in reverse order (Creg, Breg, Areg), as in the above asm,
 tends to give better code.
+
+One more example, making use of local temporary variable
+(from Roman Pozlevich, <roma@botik.ru>):
+
+int *alt (int* first, ...) {
+    int *res, **ptr;
+
+    __asm__ __volatile__ (
+	"  alt                           \n\t"
+	"  ldlp %w2; stl %w1             \n\t" 
+        "0:                              \n\t"
+        "  ldl %w1; ldnl 0; cj 1f        \n\t"
+        "  ldl %w1; ldnl 0; ldc 1; enbc  \n\t"
+        "  ldl %w1; ldnlp 1; stl %w1     \n\t"
+        "  ldc 0; cj 0b                  \n\t"
+        "1:                              \n\t"
+        "  altwt                         \n\t"
+	"  ldlp %w2; stl %w1             \n\t" 
+        "0:                              \n\t"
+        "  ldl %w1; ldnl 0; cj 1f        \n\t"
+        "  ldl %w1; ldnl 0; dup; ldc 1; rev; disc \n\t"
+	"  eqc 0; cj 1f                  \n\t"
+        "  ldl %w1; ldnlp 1; stl %w1     \n\t"
+        "  ldc 0; cj 0b                  \n\t"
+        "1:                              \n\t"
+	"  ldl 0                         \n\t"
+
+	: "=a" (res)
+	: "m" (ptr), "m" (first)
+	: "Breg", "Creg", "FAreg", "FBreg", "FCreg", "Wreg[0]"
+    );
+
+    return res;
+}
+
+You most likely don't want to understand what this code is doing, but
+note the use of "m" constraint for local variables, and the use of
+"%wN" to obtain stack offset in words for Nth operand of the asm.
 
 
 Where to get T800 patches
@@ -232,4 +272,4 @@ Acknowledgements
 
 
 
-$Revision: 1.10 $
+$Revision: 1.11 $

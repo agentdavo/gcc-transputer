@@ -1472,6 +1472,15 @@ expand_asm_operands (string, outputs, inputs, clobbers, vol, filename, line)
 	}
       else
 	{
+	  output_rtx[i] = NULL_RTX;
+	}
+
+      if (allows_reg && (output_rtx[i] == NULL_RTX
+#ifdef ASM_OUTPUT_PREDICATE
+			 || ! ASM_OUTPUT_PREDICATE (output_rtx[i], VOIDmode)
+#endif
+			 ))
+	{
 	  if (TYPE_MODE (type) == BLKmode)
 	    {
 	      output_rtx[i] = assign_stack_temp (BLKmode,
