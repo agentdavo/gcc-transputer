@@ -37,7 +37,7 @@ stack.  The benefits of this model are compact function prologues and
 cheap function calls; on the other hand, it leaves no way to implement
 a stack expansion scheme.
 
-The binary tools (assimbler, linker, etc.) for use with this model are
+The binary tools (assembler, linker, etc.) for use with this model are
 now available.  Check <http://www.botik.ru/~sizif/ttools/>, or
 <ftp://ftp.botik.ru/pub/local/ttools>.  Be warned that I have not
 ported any libraries, though.
@@ -150,7 +150,7 @@ Example 3.
          "fpusqrtlast"
          : "=t" (tmp)
          : "tP" (x)
-         : "FAreg", "FBreg", "FCreg");
+         : "FBreg", "FCreg");
 
     return tmp;
   }

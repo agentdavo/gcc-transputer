@@ -3725,7 +3725,11 @@ order_regs_for_reload ()
 
   /* Now fixed registers (which cannot safely be used for reloading)
      get a very high use count so they will be considered least desirable.
-     Registers used explicitly in the rtl code are almost as bad.  */
+     Registers used explicitly in the rtl code are almost as bad.
+  
+     Registers that can carry function return value, receive an
+     additional penalty to reduce the probability of running out of
+     spills owing to avoid_return_reg. */
 
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
@@ -3746,6 +3750,10 @@ order_regs_for_reload ()
 	  SET_HARD_REG_BIT (bad_spill_regs, i);
 #endif
 	}
+      if (FUNCTION_VALUE_REGNO_P (i))
+	hard_reg_n_uses[i].uses += 2;
+      if (FUNCTION_VALUE_REGNO_P (i+1))
+	hard_reg_n_uses[i].uses += 1;
     }
   hard_reg_n_uses[HARD_FRAME_POINTER_REGNUM].uses += 2 * large + 2;
   SET_HARD_REG_BIT (bad_spill_regs, HARD_FRAME_POINTER_REGNUM);
