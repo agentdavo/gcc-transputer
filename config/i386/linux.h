@@ -151,11 +151,15 @@ Boston, MA 02111-1307, USA.  */
 #define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
 
 #undef CPP_SPEC
+#ifdef LIBC_VERSION_1
 #if TARGET_CPU_DEFAULT == 2
 #define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
 #else
 #define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
 #endif
+#else /* not LIBC_VERSION_1 */
+#define CPP_SPEC "%(cpp_cpu) %[cpp_cpu] %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+#endif /* not LIBC_VERSION_1 */
 
 #undef	LIB_SPEC
 #if 1
@@ -190,6 +194,7 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf. */
 
 #undef	LINK_SPEC
+#ifdef LIBC_VERSION_1
 #ifndef LINUX_DEFAULT_ELF
 #define LINK_SPEC "-m elf_i386 %{shared:-shared} \
   %{!shared: \
@@ -207,6 +212,22 @@ Boston, MA 02111-1307, USA.  */
 	%{!dynamic-linker:-dynamic-linker /lib/ld-linux.so.1}} \
 	%{static:-static}}}"
 #endif
+#else /* not LIBC_VERSION_1 */
+#define LINK_SPEC "-m elf_i386 %{shared:-shared} \
+  %{!shared: \
+    %{!ibcs: \
+      %{!static: \
+	%{rdynamic:-export-dynamic} \
+	%{!dynamic-linker:-dynamic-linker /lib/ld-linux.so.2}} \
+	%{static:-static}}}"
+#endif /* not LIBC_VERSION_1 */
+
+#ifndef LIBC_VERSION_1
+#undef LIB_SPEC
+#define LIB_SPEC \
+  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
+	%{profile:-lc_p} %{!profile: -lc}}"
+#endif /* not LIBC_VERSION_1 */
 
 /* Get perform_* macros to build libgcc.a.  */
 #include "i386/perform.h"

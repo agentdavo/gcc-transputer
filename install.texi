@@ -814,6 +814,11 @@ Use this configuration to generate a.out binaries on Linux-based GNU
 systems.  This configuration is being superseded.  You must use
 gas/binutils version 2.5.2 or later.
 
+@item i386-*-linuxlibc1
+Use this configuration to generate ELF binaries on Linux-based GNU
+systems using GNU libc version 1 (Linux libc version 5).  You must use
+gas/binutils version 2.5.2 or later.
+
 @item i386-*-linux
 Use this configuration to generate ELF binaries on Linux-based GNU
 systems.  You must use gas/binutils version 2.5.2 or later.
