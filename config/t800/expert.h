@@ -610,14 +610,7 @@ varies from caller to caller).
     fprintf (file, "\tstl 2\n");	/* this function entry point */	\
     fprintf (file, "\tstl 3\n");	/* .data ptr */			\
 									\
-    /* If there are outgoing args, store -1 in the args_size word,	\
-       which means "unknown" */						\
-									\
-    if (current_function_outgoing_args_size)				\
-      {									\
-        fprintf (file, "\tldc -1\n");					\
-        fprintf (file, "\tstl 4\n");	/* args size */			\
-      }									\
+    /* Note: Wreg[4] is the args_size word.  See T800_OUTPUT__CALL */	\
   }
 
 /*>-#define EXIT_IGNORE_STACK */
@@ -903,12 +896,8 @@ bss_section ()							\
   } while (0)
 
 #undef ASM_OUTPUT_BYTE
-#define ASM_OUTPUT_BYTE(stream, value) \
-  do {						\
-    fprintf (stream, "\t.byte ");		\
-    output_addr_const (stream, value);		\
-    putc ('\n', stream);			\
-  } while (0)
+#define ASM_OUTPUT_BYTE(STREAM, VALUE) \
+  fprintf (STREAM, "\t.byte %u\n", (unsigned char) (VALUE))
 
 #undef ASM_BYTE_OP
 #define ASM_BYTE_OP  ".byte"
@@ -1008,7 +997,7 @@ bss_section ()							\
 #define ASM_OUTPUT_EXTERNAL_LIBCALL(stream, symref) \
   do {							\
     fputs ("\t.globl ", stream);			\
-    assemble_name (stream, XEXP (symref, 0));		\
+    assemble_name (stream, XSTR (symref, 0));		\
     fputc ('\n', stream);				\
   } while (0)
 
@@ -1376,6 +1365,14 @@ bss_section ()							\
 #define T800_OUTPUT__CALL \
   do {									\
     rtx xop[1];								\
+									\
+    /* if the functioin takes any args, fill the args_size word */	\
+    if (operands[2] != const0_rtx) 					\
+      {									\
+        xop[0] = operands[2];						\
+        output_asm_insn ("ldc %0", xop);				\
+        output_asm_insn ("stl 4", xop);					\
+      }									\
 									\
     /* If the function being called returns an aggregate, Areg is	\
        preloaded with output location address (STRUCT_VALUE_REGNUM).	\

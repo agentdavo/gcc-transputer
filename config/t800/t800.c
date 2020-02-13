@@ -367,22 +367,6 @@ t800_legitimize_address (x, oldx, mode)
      enum machine_mode mode;
 {
 
-  /* In dataseg-by-pointer model, data segment symref is not a
-     legitimate address.  We legitimize it by adding the dataseg start
-     pointer.
-
-     ??? Could handle word-aligned CONST's, too */
-
-  if (TARGET_DATASEG_BY_POINTER
-      && GET_CODE (x) == SYMBOL_REF
-      && SYMBOL_REF_FLAG (x) == 1)
-    {
-      x = gen_rtx (PLUS, Pmode,
-		   force_reg (Pmode, T800_DATASEG_START_RTX),
-		   x);
-      return (x);
-    }
-
   /* (PLUS (MULT r1 4) r2)) , where r[12] are ABCregs, can be
      legitimized by loading into a reg with a single `wsub' insn. */
 
@@ -413,6 +397,8 @@ t800_legitimize_address (x, oldx, mode)
       && (INTVAL (XEXP (x, 1)) % UNITS_PER_WORD) != 0)
     return copy_addr_to_reg (x);
 
+  /* Know no special tricks for legitimizing this; let the compiler do
+     it in common way */
   return x;
 }
 
