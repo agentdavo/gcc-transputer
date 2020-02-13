@@ -1073,7 +1073,11 @@ t800_expand_compare (cond, out_reg)
       case EQ:
       case NE:
       zero_extend:
-        op[1] = convert_to_mode (SImode, op[1], 1/*unsignedp*/);
+        if (GET_CODE (op[1]) == CONST_INT)
+	    op[1] = GEN_INT (INTVAL (op[1])
+			     & (GET_MODE (op[0]) == QImode? 0xff: 0xffff));
+	else
+	  op[1] = convert_to_mode (SImode, op[1], 1/*unsignedp*/);
         op[0] = convert_to_mode (SImode, op[0], 1/*unsignedp*/);
         op[0] = force_reg (SImode, op[0]);
         break;

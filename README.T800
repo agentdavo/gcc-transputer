@@ -21,6 +21,9 @@ Features and peculiarities
 
  * UNSUPPORTED: debugging info output.  Just not ripe enough for now.
 
+ * UNSUPPORTED: nested functions (GNU extension to C).  You can work
+   around this limitation by using a preprocessor macro instead.
+
  * if you want code quality to be any decent, compile with -O.  That's
    because reload pass cannot do well for transputer without register
    life info.
@@ -39,12 +42,12 @@ a stack expansion scheme.
 
 The binary tools (assembler, linker, etc.) for use with this model are
 now available.  Check <http://www.botik.ru/~sizif/ttools/>, or
-<ftp://ftp.botik.ru/pub/local/ttools>.  Be warned that I have not
-ported any libraries, though.
+<ftp://ftp.botik.ru/pub/local/ttools>.  Some libraries are available
+too -- thanks to Roman Pozlevich <roma@botik.ru>
 
-The second model (Expert) is [intended to be] compatible with the one
-used by ACE Expert compilers in Parix OS.  See the Parix documentation
-for its numerous merits.
+The second model (Expert) is compatible with the one used by ACE
+Expert compilers in the Parix OS.  The description of the model can be
+found in the Parix documentation.
 
 The two models are very different, and hopefully solve most problems
 that might arise when porting GCC to other transputer-based platforms.
@@ -254,17 +257,19 @@ You can also find gcc-t800 at the mirror in UK:
 
 Feedback
 ~~~~~~~~
- Until t800 backend becomes a part of the standard GCC distribution,
-all t800-related questions, suggestions and bug reports should be sent
-to mailing list <gcc-t800@botik.ru> and NOT to bug-gcc where GCC bugs
-normally go.  To subscribe to the list, send e-mail with a line like
-this:
+ Please e-mail bug reports to me at <sizif@botik.ru>.
+
+ DO NOT send any bug reports for gcc-t800 to the GNU bug-gcc list
+where GCC bugs normally go; gcc-t800 is not yet an official part of
+GCC.
+
+ There is a (mostly inactive) mailing list for gcc-t800:
+<gcc-t800@botik.ru>.  If you want to subscribe to the list, send
+e-mail with a line like this:
 
   subscribe <YOUR-INTERNET-ADDRESS>
 
 to <gcc-t800-request@botik.ru>.
-
-Alternatively, contact me directly: Yury Shevchuk <sizif@botik.ru>
 
 
 Installation
@@ -272,7 +277,7 @@ Installation
  (1) Apply T800 patches to the stock GCC distribution:
 
 	cd gcc-2.7.2
-	gzip -dc gcc-2.7.2-t800.3.dif.gz | patch -p1
+	gzip -dc gcc-2.7.2-t800.12.dif.gz | patch -p1
 
  (2) Configure the sources for the target of your choice.
 
@@ -334,4 +339,4 @@ Acknowledgements
 
 
 
-$Revision: 1.16 $
+$Revision: 1.17 $
