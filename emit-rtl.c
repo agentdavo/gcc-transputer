@@ -149,7 +149,8 @@ REAL_VALUE_TYPE dconstm1;
 
    In an inline procedure, the stack and frame pointer rtxs may not be
    used for anything else.  */
-rtx stack_pointer_rtx;		/* (REG:Pmode STACK_POINTER_REGNUM) */
+rtx stack_pointer_rtx;		/* (REG:Pmode STACK_POINTER_REGNUM or pseudo) */
+rtx hard_stack_pointer_rtx;	/* (REG:Pmode STACK_POINTER_REGNUM) */
 rtx frame_pointer_rtx;		/* (REG:Pmode FRAME_POINTER_REGNUM) */
 rtx hard_frame_pointer_rtx;	/* (REG:Pmode HARD_FRAME_POINTER_REGNUM) */
 rtx arg_pointer_rtx;		/* (REG:Pmode ARG_POINTER_REGNUM) */
@@ -3375,6 +3376,10 @@ init_emit_once (line_numbers)
        mode = GET_MODE_WIDER_MODE (mode))
     const_tiny_rtx[0][(int) mode] = const0_rtx;
 
+#ifdef PSEUDO_STACK_POINTER
+  hard_stack_pointer_rtx
+                    = gen_rtx (REG, Pmode, STACK_POINTER_REGNUM);
+#endif
   stack_pointer_rtx = gen_rtx (REG, Pmode, STACK_POINTER_REGNUM);
   frame_pointer_rtx = gen_rtx (REG, Pmode, FRAME_POINTER_REGNUM);
 

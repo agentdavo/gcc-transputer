@@ -1,4 +1,4 @@
-/* Definitions of target machine for GNU compiler for IMST800.
+/* Definitions of target machine for GNU compiler for INMOS transputer family.
    Copyright (C) 1992, 1993, 1994, 1995 Free Software Foundation, Inc.
 
    Written by Yury Shevchuk <sizif@botik.ru>
@@ -59,9 +59,7 @@ Boston, MA 02111-1307, USA.  */
  Run-time Target Specification
 *************************************************************/
 
-#define STRINGIFY(S)  STRINGIFY1(S)
-#define STRINGIFY1(S)  #S
-#define CPP_PREDEFINES  "-Dt" STRINGIFY(TARGET_CPU_DEFAULT)
+#define CPP_PREDEFINES  "-Dtransputer"
 
 /* #define STDC_VALUE */
 
@@ -258,10 +256,10 @@ extern int target_flags;
 #define POINTER_SIZE                    BITS_PER_WORD
 
 
-/* T800 most naturally operates on signed 32-bit values.  Tried to
-   switch this off: gives slightly worse code sometimes, but it seems
-   to be mostly due to the reuse of pseudos, which is not good with
-   our insns that pop their inputs.  */
+/* Transputers most naturally operate on signed 32-bit values.  Tried
+   to switch this off: gives slightly worse code sometimes, but it
+   seems to be mostly due to the reuse of pseudos, which is not good
+   with our insns that pop their inputs.  */
 
 #define PROMOTE_MODE(MODE,UNSIGNEDP,TYPE) \
   {                                                 \
@@ -323,8 +321,8 @@ extern int target_flags;
 
 /* T800 doesn't have 16-bit loads/stores, so supporting 16-bit shorts
    is no pleasure.  But it is still supported as an option for the
-   sake of compatibility with alien librares and hyphothetical old
-   software counting on short being half-word-wide.  */
+   sake of compatibility with alien librares and existing software
+   that counts on short being half-word-wide.  */
 
 #define SHORT_TYPE_SIZE  (TARGET_SHORT16 ? 16 : 32)
 
@@ -452,8 +450,9 @@ extern int target_flags;
 
 #define STACK_REGS  STACK_REGS_
 
-/* Amount of register stacks on the machine.  T800 has two: [ABC]reg
-   and F[ABC]reg.  */
+/* Amount of register stacks on the machine.  Transputers has two:
+   [ABC]reg and F[ABC]reg.  On the models without FPU F[ABC]reg are
+   considered fixed registers, so compiler doesn't touch them. */
 
 #define STACK_REG_NSTACKS  2
 
@@ -526,10 +525,11 @@ extern int target_flags;
 #define STACK_REG_EMIT_SWAPS(OLDSTK, NEWSTK)  t800_emit_swaps (OLDSTK, NEWSTK)
 #define STACK_REG_EMIT_PUSHES(STK, PUSH_SET)  t800_emit_pushes (STK, PUSH_SET)
 
-/* Tell reg-stack converter not bother changing virtual stack register
-   numbers to hard register numbers, because on t800 it is not necessary.
-   Register operands never occur explicitly in t800 assembler syntax,
-   but are instead implied by the insn which they are for. */
+/* Tell reg-stack converter not to bother changing virtual stack
+   register numbers to hard register numbers, because on transputers
+   (unlike i387) it is not necessary.  Register operands never occur
+   explicitly in transputer assembler syntax, but are instead implied
+   by the insn which they are for. */
 
 #define STACK_REGS_SUBSTITUTION_UNNECESSARY
 
@@ -751,16 +751,17 @@ enum reg_class
 #undef ARGS_GROW_DOWNWARD
 
 #define STARTING_FRAME_OFFSET  WORD_ROUND (current_function_outgoing_args_size)
-#define STACK_POINTER_OFFSET  (0)
+
+/* Leaving this undefined saves a lot of hair in allocate_dynamic_stack_space(),
+   making no effect otherwise (it defaults to 0 in function.c) */
+/* #define STACK_POINTER_OFFSET  (0) */
+
 #define FIRST_PARM_OFFSET(FUNDECL)  (0)
 
-/* I think I now know a way to implement alloca in spite of the lack
-   of frame pointer registers: we can have a pseudo acting for stack
-   pointer.  But skip it for now...  */
-
+/* See the comment for STACK_POINTER_OFFSET above */
 /* #define STACK_DYNAMIC_OFFSET(FUNDECL) */
-/* #define DYNAMIC_CHAIN_ADDRESS(FRAMEADDR) */
 
+#define DYNAMIC_CHAIN_ADDRESS(FRAMEADDR)  abort ()
 /*-#define SETUP_FRAME_ADDRESSES () */
 /*-#define RETURN_ADDR_RTX (count, frameaddr) */
 /*-#define RETURN_ADDR_IN_PREVIOUS_FRAME */
@@ -798,13 +799,9 @@ enum reg_class
    and we use it as a frame pointer.  Arg pointer is a fake register
    which is eliminated to Wreg in reload pass.  For functions which do
    not call alloca() stack pointer is another fake register, also
-   eliminated in favor of Wreg.  But in functions that do call
-   alloca the offset between stack pointer and Wreg is not known until
-   runtime, so couldn't eliminate it.
-
-   The only way to go with alloca-calling functions is to use a
-   pseudo (actually a stack slot, grin) as the stack pointer.
-   This is not yet implemented.  */
+   eliminated in favor of Wreg.  In functions that do call alloca() we
+   use a pseudo for stack pointer, so the mentioned fake stack pointer
+   register should not appear at all. */
 
 #define FRAME_POINTER_REQUIRED  (1)
 
@@ -903,17 +900,25 @@ enum reg_class
    function being called before FUNCTION_ARG is asked where each
    particular argument should be passed.
 
-   For T800, it can command to pass everything on stack if there is an
-   arg that would normally be passed in registers but cannot be passed
-   there for some reason (eg MUST_PASS_IN_STACK says it shouldn't).
+   On transputers, it can command to pass everything on stack if there
+   is an arg that would normally be passed in registers but cannot be
+   passed there for some reason (eg MUST_PASS_IN_STACK says it
+   shouldn't).
+
+   We also choose to pass everything in stack if current function uses
+   dynamic stack space allocation: in this case we have a pseudo stack
+   pointer which should be swapped with Wreg just before the actual
+   call, and we wouldn't have a scratch register required for this if
+   we passed in registers as usual.
 
    If the passing on stack has been triggered, the `call' and
-   `call_value' patterns will use `j' instead of `call' to avoid
-   pushing [ABC]reg onto the stack.  */
+   `call_value' patterns will use `j' or `gcall' instead of `call' to
+   avoid pushing [ABC]reg onto the stack.  */
 
 #define FUNCTION_ARG_PRESCAN(CUM, MODE, TYPE, NAMED) \
   do {                                                                  \
     (CUM).must_pass_in_stack |= current_call_is_indirect;               \
+    (CUM).must_pass_in_stack |= current_function_calls_alloca;          \
     if (! (CUM).must_pass_in_stack                                      \
         && (CUM).lst_free_reg <= R_CREG)                                \
       {                                                                 \
@@ -972,11 +977,10 @@ typedef struct {
 /*** How Scalar Function Values Are Returned ****************/
 
 /* Integer values are returned on the integer reg-stack.  Returning
-   floating values there is not efficient, since the move between
-   integer and and floating regs is a costly operation on T800.  The
-   rest two ways are to return either in a floating reg or in memory.
-   We choose the first: floating values are returned on the floating
-   reg-stack.
+   floating values there is not efficient, since moves between
+   integer and and floating regs are costly.  The rest two ways are to
+   return either in a floating reg or in memory.  We choose the first:
+   floating values are returned on the floating reg-stack.
 
    The `ret' instruction does not restore regs from stack, so the
    caller will see returns just where the callee has put them (hence
@@ -996,7 +1000,7 @@ typedef struct {
              || TREE_CODE (VALTYPE) == OFFSET_TYPE)                         \
             && TYPE_PRECISION (VALTYPE) < BITS_PER_WORD)                    \
            ? word_mode : TYPE_MODE (VALTYPE),                               \
-           TREE_CODE (VALTYPE) == (REAL_TYPE && TARGET_HAVE_FPU)            \
+           (TREE_CODE (VALTYPE) == REAL_TYPE && TARGET_HAVE_FPU)            \
                                   ? R_FAREG : R_AREG)
 
 /* - #define FUNCTION_OUTGOING_VALUE(@var{valtype}, @var{func}) */
@@ -1087,7 +1091,7 @@ typedef struct {
  Trampolines for Nested Functions
 *************************************************************/
 
-/* For the first time, put stubs here */
+/* Not implemented -- standard C/C++ should not need those */
 
 #define TRAMPOLINE_TEMPLATE(FILE)                               abort ();
 /* #define TRAMPOLINE_SECTION */
@@ -1896,6 +1900,12 @@ bss_section ()							\
 #define FP_REGNO_P(regno)   ((regno) >= 3 && (regno) <= 5)
 #define FP_REG_P(X)         (REG_P (X) && FP_REGNO_P (REGNO (X)))
 
+/* How much bytes below Wreg are used by transputer firmware.  Note
+   that stack converter also uses 6 words below Wreg as scratch
+   locations while rotating the stack, so the should not be set lower
+   than that. */
+#define WORKSPACE_RESERVED_BYTES  (7 * UNITS_PER_WORD)
+
 /* Is the reg a stack reg? */
 #define STACK_REG_P(X)      (REG_P (X) && REGNO(X) <= 5)
 
@@ -2076,6 +2086,10 @@ extern int t800_init_once_completed;
 
 #define ASM_OUTPUT_PREDICATE(X, MODE) \
   (ABCreg_operand (X, MODE) || FABCreg_operand (X, MODE))
+
+#define PSEUDO_STACK_POINTER
+
+
 
 
 /* Prototypes for functions in t800.c */

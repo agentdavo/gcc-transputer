@@ -1,4 +1,4 @@
-/* Definitions of target machine for GNU compiler for T800,
+/* Definitions of target machine for GNU compiler for INMOS transputer,
    ACE EXPERT Transputer Runtime Model.
    Copyright (C) 1992, 1993, 1994, 1995 Free Software Foundation, Inc.
 
@@ -22,7 +22,8 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-/* Include generic definitions for T800 family */
+/* Include generic definitions for transputer family.  A number of
+   macros are redefined in this file as needed for the Expert model. */
 
 #include "t800/t800.h"
 
@@ -535,7 +536,7 @@ varies from caller to caller).
                   + IN_WORDS (current_function_outgoing_args_size)	\
 		  + IN_WORDS (STACK_POINTER_OFFSET);			\
 									\
-    /* Unused on t800; we don't expect to handle this */		\
+    /* Unused on transputers; we don't expect to handle this */		\
     if (current_function_pretend_args_size)				\
       abort ();								\
 									\
@@ -938,7 +939,7 @@ bss_section ()							\
 /* #define ASM_OUTPUT_COMMON(stream, name, size, rounded) */
 
 #undef ASM_OUTPUT_ALIGNED_COMMON
-#define ASM_OUTPUT_ALIGNED_COMMON (STREAM, NAME, SIZE, ALIGNMENT) \
+#define ASM_OUTPUT_ALIGNED_COMMON(STREAM, NAME, SIZE, ALIGNMENT) \
   do {									\
     if ((ALIGNMENT) > BITS_PER_UNIT)					\
       fprintf (STREAM, "\t.align %u\n", (ALIGNMENT)/BITS_PER_UNIT);	\
@@ -954,7 +955,7 @@ bss_section ()							\
 /* #define ASM_OUTPUT_LOCAL(stream, name, size, rounded) */
 
 #undef ASM_OUTPUT_ALIGNED_LOCAL
-#define ASM_OUTPUT_ALIGNED_LOCAL (STREAM, NAME, SIZE, ALIGNMENT) \
+#define ASM_OUTPUT_ALIGNED_LOCAL(STREAM, NAME, SIZE, ALIGNMENT) \
   do {									\
     bss_section ();							\
     if ((ALIGNMENT) > BITS_PER_UNIT)					\
@@ -1388,7 +1389,7 @@ bss_section ()							\
 									\
     /* argptr */							\
     if (operands[2] != const0_rtx					\
-        || GET_MODE (XEXP (PATTERN (insn), 1)) != VOIDmode)		\
+        || GET_MODE (PATTERN (insn)) == BLKmode)			\
       {									\
         xop[0] = GEN_INT (WORD_ROUND (STACK_POINTER_OFFSET));		\
         output_asm_insn ("ldlp %w0", xop);				\
@@ -1472,3 +1473,6 @@ bss_section ()							\
 
 #undef T800_OUTPUT_NOP
 #define T800_OUTPUT_NOP  return ".byte 0x20";
+
+#define T800_EXPAND_ALLOCATE_STACK \
+    fatal (\"The program being compiled requires dynamic stack space allocation which is not implemented in Expert run-time model.  So much sorry.\");

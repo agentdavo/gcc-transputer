@@ -856,6 +856,7 @@ extern rtx const_tiny_rtx[3][(int) MAX_MACHINE_MODE];
    by allocating pseudo regs into them (when that's possible),
    go through these unique rtx objects.  */
 extern rtx stack_pointer_rtx;
+extern rtx hard_stack_pointer_rtx;
 extern rtx frame_pointer_rtx;
 extern rtx hard_frame_pointer_rtx;
 extern rtx arg_pointer_rtx;

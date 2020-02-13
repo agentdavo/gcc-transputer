@@ -235,6 +235,11 @@ patchNNN.gz contains patches from alpha release MMM to alpha release
 NNN, where MMM=NNN-1.  changesNNN contain a short overview of the
 changes.
 
+You can also find gcc-t800 at the mirror in UK:
+
+  ftp://unix.hensa.ac.uk/pub/parallel/transputer/software/compilers/gcc/pereslavl/
+  http://www.hensa.ac.uk/parallel/transputer/software/compilers/gcc/pereslavl/
+
 
 Feedback
 ~~~~~~~~
@@ -305,9 +310,14 @@ Acknowledgements
  for the promotion of cooperation with scientists from the independent
  states of the former Soviet Union; grant # INTAS-93-0972
 
+ Dave Beckett <D.J.Beckett@ukc.ac.uk> easies life to the downloaders
+ of the package by mirroring gcc-t800 and TTOOLS home site at
+ unix.hensa.ac.uk.
+ 
+
  Thanks to all.
 
 
 
 
-$Revision: 1.12 $
+$Revision: 1.13 $

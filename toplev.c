@@ -2814,6 +2814,34 @@ rest_of_compilation (decl)
     FINALIZE_PIC;
 #endif
 
+#ifdef PSEUDO_STACK_POINTER
+  /* Beleive it or not, there are machines where there is only one
+     register to address stack frame.  We can live with it until it
+     comes to dynamic stack space allocation, where one really needs a
+     separate stack pointer to address outgoing args.  If this is the
+     case, we should allocate a pseudo to act as a stack pointer,
+     substitute it in place of (REG:SI STACK_POINTER_REGNUM) in
+     stack_pointer_rtx (doing so instantly changes all generated insns
+     which refer to stack_pointer_rtx), and pray virtual register
+     instantiation will work.  */
+  if (current_function_calls_alloca)
+    {
+      rtx pseudo = gen_reg_rtx (Pmode);
+
+      /* Insert initialization of the pseudo stack pointer from the
+         hard stack pointer at the beginning of the function.  First
+         insn in the chain is always a NOTE_INSN_DELETED, emit our
+         move after that */
+      emit_insn_after (gen_move_insn (stack_pointer_rtx,
+				      hard_stack_pointer_rtx),
+		       get_insns ());
+
+      /* Substitute the pseudo in place of STACK_POINTER_REGNUM */
+      REGNO (stack_pointer_rtx) = REGNO (pseudo);
+      regno_reg_rtx[REGNO (pseudo)] = stack_pointer_rtx;
+    }
+#endif /* PSEUDO_STACK_POINTER */
+
   insns = get_insns ();
 
   /* Copy any shared structure that should not be shared.  */
@@ -3305,6 +3333,14 @@ rest_of_compilation (decl)
 
   reload_completed = 0;
   exotic_completed = 0;
+
+#ifdef PSEUDO_STACK_POINTER
+  /* If we fooled with stack_pointer_rtx, restore its normal state */
+  if (current_function_calls_alloca) {
+    PUT_CODE (stack_pointer_rtx, REG);
+    REGNO (stack_pointer_rtx) = STACK_POINTER_REGNUM;
+  }
+#endif /* PSEUDO_STACK_POINTER */
 
   /* Clear out the insn_length contents now that they are no longer valid.  */
   init_insn_lengths ();

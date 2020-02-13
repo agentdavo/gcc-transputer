@@ -1,4 +1,4 @@
-/* Subroutines used for code generation on T800.
+/* Subroutines used for code generation on transputer.
    Copyright (C) 1992, 1993, 1994, 1995 Free Software Foundation, Inc.
 
    Written by Yury Shevchuk <sizif@botik.ru>
@@ -74,7 +74,7 @@ char register_move_cost[FIRST_PSEUDO_REGISTER][FIRST_PSEUDO_REGISTER] = {
  Helper functions for t800.h macros
 ************************************************************/
 
-/* PRINT_OPERAND implementation.  On t800, what eventually gets
+/* PRINT_OPERAND implementation.  On transputers, what eventually gets
    printed is always a constant expression.  But operand (X) may be
    some other RTX, eg MEM; the machine description allows this because
    it is more efficient.  This routine first finds the constant to be
@@ -271,8 +271,8 @@ again:
     }
 }
 
-/* Tell how costly the constant is. On T800, this can be measured as
-   the amount of {pfix,nfix} insns needed.  */
+/* Tell how costly the constant is. On transputers, this can be
+   measured as the amount of {pfix,nfix} insns needed.  */
 
 int
 t800_const_cost (i)
@@ -293,10 +293,11 @@ t800_const_cost (i)
   return cost;
 }
 
-/* The implementation of SECONDARY_MEMORY_NEEDED macro.
-   Copying between floating and any other reg requires an intermediate
-   memory location on T800 */
+/* The implementation of SECONDARY_MEMORY_NEEDED macro.  Copying
+   between floating and any other reg on transputers requires an
+   intermediate memory location. */
 
+#ifdef SECONDARY_MEMORY_NEEDED
 int
 secondary_memory_needed(class1, class2, mode)
   enum reg_class class1;
@@ -318,6 +319,7 @@ m2:
 
   return float_reg_1 ^ float_reg_2;
 }
+#endif /* SECONDARY_MEMORY_NEEDED */
 
 
 static int regno_to_find;
@@ -1253,11 +1255,13 @@ t800_expand_call(ret, fun, stack_size_rtx, next_arg_reg, struct_value_size_rtx)
   int aggregate_valued
     = (struct_value_size_rtx && INTVAL (struct_value_size_rtx));
   rtx insn;
+  rtx temp;
+  rtx saveslot;
 
   if (ret == NULL_RTX)
     ret = gen_rtx (REG, SImode, R_AREG);
 
-  /* If function address is not constant, or if FUNCTION_ARG decided
+  /* If the function address is not constant, or if FUNCTION_ARG decided
      it's better to pass everything on stack, normal `call' insn
      won't do. Use gcall instead. */
 
@@ -1269,11 +1273,31 @@ t800_expand_call(ret, fun, stack_size_rtx, next_arg_reg, struct_value_size_rtx)
         = insn_operand_predicate[CODE_FOR__gcall][1];
 
       if (function_address_predicate
-	  && (! function_address_predicate (addr, FUNCTION_MODE)))
+	  && (! function_address_predicate (addr, Pmode)))
         addr = copy_to_reg (addr);
 
-#ifdef STRUCT_VALUE_REGNUM
+#ifdef PSEUDO_STACK_POINTER
+      if (current_function_calls_alloca)
+	{
+	  /* Just before the call, retarget Wreg to where our pseudo
+	     stack pointer points.  Save the normal value of Wreg in a
+	     stack slot just above the
+	     current_function_outgoing_args_size, to be able to revert
+	     Wreg to normal after the call.
 
+	     Careful: Areg and Breg at the moment may carry stack value
+	     return address and the function address, do not clobber them.  */
+
+	  temp = gen_rtx (REG, Pmode, R_CREG);
+	  saveslot = t800_gen_local (Pmode, current_function_outgoing_args_size);
+
+	  emit_insn (gen_move_insn (temp, stack_pointer_rtx));
+	  emit_insn (gen__gajw (hard_stack_pointer_rtx, temp));
+	  emit_insn (gen_move_insn (saveslot, temp));
+	}
+#endif /* PSEUDO_STACK_POINTER */
+
+#ifdef STRUCT_VALUE_REGNUM
       /* If this call takes return value address in a reg, we must
 	 arrange for using a special flavor of gcall which has
 	 function address constrained to another register.  See
@@ -1286,15 +1310,33 @@ t800_expand_call(ret, fun, stack_size_rtx, next_arg_reg, struct_value_size_rtx)
 #else
       insn = emit_call_insn (gen__gcall (ret, addr, stack_size_rtx));
       if (aggregate_valued)
-         PUT_MODE (XEXP (PATTERN (insn), 1), BLKmode);
-#endif
+        {
+          /* sign to T800_OUTPUT_GCALL in expert model */
+          PUT_MODE (PATTERN (insn), BLKmode);
+        }
+#endif /* STRUCT_VALUE_REGNUM */
+
+#ifdef PSEUDO_STACK_POINTER
+      if (current_function_calls_alloca)
+	{
+	  /* Restore Wreg to its normal position */
+	  emit_insn (gen_move_insn (temp, saveslot));
+	  emit_insn (gen__gajw (hard_stack_pointer_rtx, temp));
+	  /* The old Wreg value is left on the regstack.  Never mind,
+	     stack converter will take care of it */
+	}
     }
+#endif /* PSEUDO_STACK_POINTER */
+
   else
     {
       /* The normal case */
       insn = emit_call_insn (gen__call (ret, addr, stack_size_rtx));
       if (aggregate_valued)
-        PUT_MODE (XEXP (PATTERN (insn), 1), BLKmode);
+        {
+          /* sign to T800_OUTPUT_CALL in expert model */
+          PUT_MODE (PATTERN (insn), BLKmode);
+        }
     }
 }
 
@@ -1537,10 +1579,10 @@ emit_t800_insns (str, st)
 
 /* Procedure for discarding regs from reg-stack.
 
-   On T800, there are two ways to delete a reg from reg-stack.
-   1) if the reg is at top of stack, it can be popped (stl <dummy>);
+   There are two ways to delete a reg from reg-stack.
+   1) if the reg is at the top of stack, it can be popped (stl <dummy>);
    2) if the reg is at the bottom, it can be forgotten without
-      an insn, since the T800's reg-stacks are not `strict'.
+      an insn, since the transputer's reg-stacks are not `strict'.
    There is no insn to drop a reg that is in the middle of the stack.
    In this case we have to swap some regs to bring the reg to be
    dropped into suitable position (top, in practice).
