@@ -19,17 +19,11 @@ Features and peculiarities
  * SUPPORTED: floating point instructions.  However, no attempt is
    made to optimize ALU and FPU operation overlapping.
 
- * UNSUPPORTED: dynamic stack space allocation (alloca(3)).  Hard to
-   implement given the only register to address stack frame.
-
  * UNSUPPORTED: debugging info output.  Just not ripe enough for now.
 
  * if you want code quality to be any decent, compile with -O.  That's
    because reload pass cannot do well for transputer without register
-   life info. Moreover, certain programs, notably those using asms
-   with three nontrivial input operands, might fail to compile unless
-   optimization is enabled (running out of spills in reload).  So do
-   use -O.
+   life info.
 
 
 Run-time models supported
@@ -106,7 +100,31 @@ Constraint letters meaning:
  t,v,u	FAreg, FBreg, FCreg respectively
  P	popped input constraint modifier.
 
-Another example:
+
+Example 2.
+
+  void
+  outword (unsigned word, unsigned chan)
+  {
+    asm volatile
+	("outword"
+         : /* no outputs */
+         : "bP" (chan), "aP" (word)
+         : "Areg", "Breg", "Creg", "FAreg", "FBreg", "FCreg", "Wreg[0]");
+  }
+
+This asm consumes two inputs which come in Areg and Breg.  The
+modifier constraint `P' indicates that the input is popped off the
+stack by the asm.  The clobber section indicates that the asm clobbers
+all stack registers.
+
+"Wreg[0]" in the clobber section indicates that this asm destroys the
+value of the word at the top of workspace.  Note that "Wreg[0]" is
+just an identifier; you cannot write, say, "Wreg[1]" here.
+
+Note that popping constraint is not a substitute for a clobber; thus,
+following asm would not reflect the fact that all registers are
+clobbered by this asm (and so is incorrect):
 
   void
   outword (unsigned word, unsigned chan)
@@ -118,19 +136,8 @@ Another example:
          : "Creg", "FAreg", "FBreg", "FCreg", "Wreg[0]");
   }
 
-This asm consumes two inputs which come in Areg and Breg.  The
-modifier constraint `P' indicates that the input is popped off the
-stack by the asm.  The clobber section indicates that the asm clobbers
-all stack registers (Areg and Breg might be mentioned here too, but
-the popping constraint makes this unnecessary, and you get better code
-by not explicitly clobbering a register which is also an input for the
-insn).
 
-"Wreg[0]" in the clobber section indicates that this asm destroys the
-value of the word at the top of workspace.  Note that "Wreg[0]" is
-just an identifier; you cannot write, say, "Wreg[1]" here.
-
-Yet another example:
+Example 3.
 
   float
   square_root (float x)
@@ -143,7 +150,7 @@ Yet another example:
          "fpusqrtlast"
          : "=t" (tmp)
          : "tP" (x)
-         : "FBreg", "FCreg");
+         : "FAreg", "FBreg", "FCreg");
 
     return tmp;
   }
@@ -151,7 +158,8 @@ Yet another example:
 This asm pops its input off floating reg-stack, and pushes the result
 back onto the floating reg-stack.
 
-One more example from real life:
+
+Example 4, from real life
 
   static inline int
   lit_load_in_byte (void)
@@ -165,7 +173,7 @@ One more example from real life:
            : "cP" (&tmp),
              "bP" (boot_link_in),
              "aP" (1)
-           : "FAreg", "FBreg", "FCreg", "memory");
+           : "Areg", "Breg", "Creg", "FAreg", "FBreg", "FCreg", "memory");
   
       return tmp;
   }
@@ -181,6 +189,9 @@ always return 0.
 Note that the order of input operands in asms matters: supplying the
 operands in reverse order (Creg, Breg, Areg), as in the above asm,
 tends to give better code.
+
+
+
 
 One more example, making use of local temporary variable
 (from Roman Pozlevich, <roma@botik.ru>):
@@ -296,6 +307,10 @@ Installation
 	make LANGUAGES=c CC=gcc
 	make install
 
+     While making, you will see warnings about `-g' and `-g1' options
+     being unsupported by the compiler -- indeed, debugging info
+     output is not yet supported.  Ignore the warnings.
+
 
 Acknowledgements
 ~~~~~~~~~~~~~~~~
@@ -311,8 +326,7 @@ Acknowledgements
  states of the former Soviet Union; grant # INTAS-93-0972
 
  Dave Beckett <D.J.Beckett@ukc.ac.uk> easies life to the downloaders
- of the package by mirroring gcc-t800 and TTOOLS home site at
- unix.hensa.ac.uk.
+ of the package by mirroring gcc-t800 and TTOOLS at unix.hensa.ac.uk.
  
 
  Thanks to all.
@@ -320,4 +334,4 @@ Acknowledgements
 
 
 
-$Revision: 1.13 $
+$Revision: 1.15 $

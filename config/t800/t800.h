@@ -761,7 +761,7 @@ enum reg_class
 /* See the comment for STACK_POINTER_OFFSET above */
 /* #define STACK_DYNAMIC_OFFSET(FUNDECL) */
 
-#define DYNAMIC_CHAIN_ADDRESS(FRAMEADDR)  abort ()
+#define DYNAMIC_CHAIN_ADDRESS(FRAMEADDR)  ((void *)abort ())
 /*-#define SETUP_FRAME_ADDRESSES () */
 /*-#define RETURN_ADDR_RTX (count, frameaddr) */
 /*-#define RETURN_ADDR_IN_PREVIOUS_FRAME */
@@ -2076,16 +2076,19 @@ extern int t800_init_once_completed;
     return "ret";							\
  }
 
-/* Tell code in expand_asm_operands() always to get output in a
-   register (copy through an intermediate location, if nec.), provided
-   the output operand's constraints allow a register.  Otherwise the
-   asm may wind up requiring reload to a nonlocal variable, which is
-   hard to handle because store instruction pop the address of the
-   variable -- which is likely to be required for a later insn, which
-   gets unhappy in the reg-stack pass.  */
+/* Predicate expression which valid asm operands should conform to.
+   If this macro is not defined, general_operand is used.
 
-#define ASM_OUTPUT_PREDICATE(X, MODE) \
-  (ABCreg_operand (X, MODE) || FABCreg_operand (X, MODE))
+   We want something more restrictive than general_operand, because
+   otherwise we may wind up needing to reload from/to nonlocal memory,
+   and that is hard to handle.  First, we may run out of spills
+   ("fixed or forbidden register was spilled").  Second, nonlocal
+   output reloads are troublesome because store instruction pops the
+   memory address, which is likely to be required for a later insn,
+   which gets unhappy in the reg-stack pass.  */
+
+#define ASM_OPERAND_PREDICATE(X, MODE) \
+  (register_operand (X, MODE) || local_operand (X, MODE))
 
 #define PSEUDO_STACK_POINTER
 

@@ -121,7 +121,11 @@ check_asm_operands (x)
   decode_asm_operands (x, operands, NULL_PTR, NULL_PTR, NULL_PTR);
 
   for (i = 0; i < noperands; i++)
+#ifdef ASM_OPERAND_PREDICATE
+    if (! ASM_OPERAND_PREDICATE (operands[i], VOIDmode))
+#else
     if (!general_operand (operands[i], VOIDmode))
+#endif
       return 0;
 
   return 1;

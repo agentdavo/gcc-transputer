@@ -1476,8 +1476,8 @@ expand_asm_operands (string, outputs, inputs, clobbers, vol, filename, line)
 	}
 
       if (allows_reg && (output_rtx[i] == NULL_RTX
-#ifdef ASM_OUTPUT_PREDICATE
-			 || ! ASM_OUTPUT_PREDICATE (output_rtx[i], VOIDmode)
+#ifdef ASM_OPERAND_PREDICATE
+			 || ! ASM_OPERAND_PREDICATE (output_rtx[i], VOIDmode)
 #endif
 			 ))
 	{
@@ -1564,6 +1564,16 @@ expand_asm_operands (string, outputs, inputs, clobbers, vol, filename, line)
 
       XVECEXP (body, 3, i)      /* argvec */
 	= expand_expr (TREE_VALUE (tail), NULL_RTX, VOIDmode, 0);
+
+#ifdef ASM_OPERAND_PREDICATE
+      if (! ASM_OPERAND_PREDICATE (XVECEXP (body, 3, i),
+				   TYPE_MODE (TREE_TYPE (TREE_VALUE (tail))))
+	  && allows_reg)
+	XVECEXP (body, 3, i)
+	      = force_reg (TYPE_MODE (TREE_TYPE (TREE_VALUE (tail))),
+			   XVECEXP (body, 3, i));
+#endif
+
       if (CONSTANT_P (XVECEXP (body, 3, i))
 	  && ! general_operand (XVECEXP (body, 3, i),
 				TYPE_MODE (TREE_TYPE (TREE_VALUE (tail)))))
