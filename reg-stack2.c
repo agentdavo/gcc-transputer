@@ -2064,7 +2064,7 @@ delete_insn_for_stacker (insn)
    deleted to avoid confusing output patterns.
    If it is, delete it and return 1. Otherwise, return 0.
    REGSTACK is the current stack, which is modified to reflect
-   the effect of deleting insn. */
+   the effect of deleting the insn. */
 
 static int
 del_stack_reg_move (insn, regstack)
@@ -2072,19 +2072,50 @@ del_stack_reg_move (insn, regstack)
      stack regstack;
 {
   rtx pat = PATTERN (insn);
-  rtx src = SET_SRC (pat);
-  rtx dest = SET_DEST (pat);
+  rtx src, dest;
+  int i;
 
+  switch (GET_CODE (pat))
+    {
+    case SET:
+      src = SET_SRC (pat);
+      dest = SET_DEST (pat);
+      break;
+
+    case PARALLEL:
+      src = dest = NULL_RTX;
+      for (i = XVECLEN (pat, 0); --i >= 0; )
+	{
+	  rtx x = XVECEXP (pat, 0, i);
+
+	  if (GET_CODE (x) == SET)
+	    {
+	      if (dest != NULL_RTX)
+		return 0;  /* more than one SET -- not a simple move */
+	      src = SET_SRC (x);
+	      dest = SET_DEST (x);
+	    }
+	  else if (GET_CODE (x) == USE || GET_CODE (x) == CLOBBER)
+	    ;
+	  else
+	    return 0;  /* Not SET, USE, or CLOBBER -- not a simple move. */
+	}
+      break;
+
+    default:
+      return 0;
+    }
+      
   if (STACK_REG_P (src) && STACK_REG_P (dest)
       && STACK_REG_STACKNO (REGNO (src)) == STACK_REG_STACKNO (REGNO (dest)))
     {
-      /* Write from one stack reg to another. */
-      /* Our actions depend on the three conditions:
+      /* Yes; this insn is a write from one stack reg to another reg in the
+	 same register stack.  Our actions depend on three conditions:
            (1) whether SRC dies in this insn
            (2) whether DEST is unused after this insn
            (3) whether SRC and DEST are the same reg. */
 
-      int i;
+      int i, r;
       enum { SRC_DIES=1, DEST_UNUSED=2, SAME_REG=4 } cond;
 
       cond = 0;
@@ -2094,12 +2125,6 @@ del_stack_reg_move (insn, regstack)
         cond |= DEST_UNUSED;
       if (REGNO (src) == REGNO (dest))
         cond |= SAME_REG;
-
-      /* The code below cannot handle multi-register moves.
-         I hope never see them here */
-
-      if (HARD_REGNO_NREGS (REGNO (dest), GET_MODE (dest)) != 1)
-          abort ();
 
       switch (cond)
         {
@@ -2115,19 +2140,24 @@ del_stack_reg_move (insn, regstack)
             /* SRC dies here, but DEST is not UNUSED. Just change the
                register mapping and delete the insn. */
 
-            i = get_hard_regnum (regstack, src);
-            if (i < 0)
-              abort ();
-            REG_BY_HARD_REGNO (regstack, i) = REGNO (dest);
-            SET_HARD_REG_BIT (regstack->reg_set, REGNO (dest));
-            CLEAR_HARD_REG_BIT (regstack->reg_set, REGNO (src));
+	    r = get_hard_regnum (regstack, src);
+	    if (r < 0)
+	      abort ();
+	    i = HARD_REGNO_NREGS (REGNO (src), GET_MODE (src));
+	    while (--i >= 0)
+	      {
+		REG_BY_HARD_REGNO (regstack, r+i) = REGNO (dest)+i;
+		SET_HARD_REG_BIT (regstack->reg_set, REGNO (dest)+i);
+		CLEAR_HARD_REG_BIT (regstack->reg_set, REGNO (src)+i);
+	      }
             delete_insn_for_stacker (insn);
             return (1);
 
-            /* Life anlysis never produces the former combination, but
-               it may appear as a result of atom_force_single_reg().
-               It's simpler to ignore this here than to bother removing
-               the note there, so treat this as bare SAME_REG.  */
+            /* Life anlysis never produces first combination, but it
+               can appear as a result of atom_force_single_reg().
+               It's simpler to ignore this here than to bother
+               removing the note there, so treat this as bare
+               SAME_REG.  */
 
           case SAME_REG+SRC_DIES:
           case DEST_UNUSED:
@@ -2149,7 +2179,9 @@ del_stack_reg_move (insn, regstack)
             {
               HARD_REG_SET drop_set;
               CLEAR_HARD_REG_SET (drop_set);
-              SET_HARD_REG_BIT (drop_set, REGNO (src));
+	      i = HARD_REGNO_NREGS (REGNO (src), GET_MODE (src));
+	      while (--i >= 0)
+		SET_HARD_REG_BIT (drop_set, REGNO (src)+i);
               start_sequence ();
               STACK_REG_EMIT_DROPS (regstack, drop_set);
               emit_insn_before (gen_sequence (), insn);
@@ -2517,10 +2549,10 @@ analyse_insn (insn, info)
   rtx *operands = recog_operand;
   char *const *constraints;
 
-
+  info->is_asm = ((n_operands = asm_noperands (PATTERN (insn))) >= 0);
+  CLEAR_HARD_REG_SET (info->out_regs);
   info->in_last  = &info->in[-1];
   info->out_last = &info->out[-1];
-  info->is_asm = ((n_operands = asm_noperands (PATTERN (insn))) >= 0);
 
   if (info->is_asm)
     {
@@ -2708,9 +2740,9 @@ subst_stack_regs (insn, regstack, jumpstack)
 	/* A special kind of insn that recog doesn't recognize; skip it too */
     return;
 
-  /* See if this is a MOVE insn that can be deleted */
+  /* See if this is a reg->reg MOVE insn that can (and should) be deleted */
 
-  if (GET_CODE (body) == SET && del_stack_reg_move (insn, regstack) > 0)
+  if (del_stack_reg_move (insn, regstack) > 0)
     return;
 
   analyse_insn (insn, &inf);

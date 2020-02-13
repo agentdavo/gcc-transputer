@@ -3693,7 +3693,7 @@ order_regs_for_reload ()
 {
   register int i;
   register int o = 0;
-  int large = 0;
+  int large = 1;
 
   struct hard_reg_n_uses hard_reg_n_uses[FIRST_PSEUDO_REGISTER];
 
@@ -3735,12 +3735,12 @@ order_regs_for_reload ()
     {
       if (fixed_regs[i])
 	{
-	  hard_reg_n_uses[i].uses += 2 * large + 2;
+	  hard_reg_n_uses[i].uses += 4 * large;
 	  SET_HARD_REG_BIT (bad_spill_regs, i);
 	}
       else if (regs_explicitly_used[i])
 	{
-	  hard_reg_n_uses[i].uses += large + 1;
+	  hard_reg_n_uses[i].uses += large;
 #ifndef SMALL_REGISTER_CLASSES
 	  /* ??? We are doing this here because of the potential that
 	     bad code may be generated if a register explicitly used in
@@ -3751,11 +3751,15 @@ order_regs_for_reload ()
 #endif
 	}
       if (FUNCTION_VALUE_REGNO_P (i))
-	hard_reg_n_uses[i].uses += 2;
-      if (FUNCTION_VALUE_REGNO_P (i+1))
-	hard_reg_n_uses[i].uses += 1;
+	{
+	  hard_reg_n_uses[i].uses += 2 * large;
+	  if (i+1 < FIRST_PSEUDO_REGISTER) /* ??? bad on machines not
+					      actually using two regs for
+					      return value */
+	    hard_reg_n_uses[i+1].uses += large;
+	}
     }
-  hard_reg_n_uses[HARD_FRAME_POINTER_REGNUM].uses += 2 * large + 2;
+  hard_reg_n_uses[HARD_FRAME_POINTER_REGNUM].uses += 4 * large;
   SET_HARD_REG_BIT (bad_spill_regs, HARD_FRAME_POINTER_REGNUM);
 
 #ifdef ELIMINABLE_REGS
@@ -3763,7 +3767,7 @@ order_regs_for_reload ()
      poor choices.  */
   for (i = 0; i < NUM_ELIMINABLE_REGS; i++)
     {
-      hard_reg_n_uses[reg_eliminate[i].from].uses += 2 * large + 2;
+      hard_reg_n_uses[reg_eliminate[i].from].uses += 4 * large;
       SET_HARD_REG_BIT (bad_spill_regs, reg_eliminate[i].from);
     }
 #endif

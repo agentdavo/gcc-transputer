@@ -24,3 +24,8 @@ LIBGCC1_LDFLAGS = -Wl,--hook,_main_without__main
 # building enquire requires some libc headers, which we don't have.
 # So don't build it by default; "make enquire" is you really need it.
 ENQUIRE = 
+
+# Since you most likely don't have libc for target handy, using
+# enquire to build float.h is not feasible.  So use a premade one
+# (thanks to Roman Pozlevich <roma@roma.botik.ru>
+CROSS_FLOAT_H = $(srcdir)/config/t800/float.h
