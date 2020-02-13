@@ -536,8 +536,8 @@ varies from caller to caller).
                   + IN_WORDS (current_function_outgoing_args_size)	\
 		  + IN_WORDS (STACK_POINTER_OFFSET);			\
 									\
-    /* Unused on transputers; we don't expect to handle this */		\
     if (current_function_pretend_args_size)				\
+      /* Unused on transputers; we don't expect to handle this */	\
       abort ();								\
 									\
     if (TARGET_STACK_EXTEND)						\
@@ -600,8 +600,9 @@ varies from caller to caller).
       }									\
     fprintf (file, "\tldl 1\n");					\
     fprintf (file, "\tldnl 1\n");	/* .data ptr */			\
-    fprintf (file, "\tldc _%s-2\n",					\
-      XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));		\
+    fprintf (file, "\tldc ");						\
+    assemble_name (file, XSTR (XEXP (DECL_RTL (current_function_decl),0),0));\
+    fprintf (file, "-2\n");						\
     fprintf (file, "\tldpi\n");		/* this finction entry point */	\
     fprintf (file, "\tldlp 5\n");	/* frame link */		\
     fprintf (file, "\tajw -%u\n", totsize);				\
@@ -1432,7 +1433,7 @@ bss_section ()							\
        For argumentless calls, we don't write argptr. */		\
 									\
     /* resptr */							\
-    if (GET_MODE (XEXP (PATTERN (insn), 1)) != VOIDmode)		\
+    if (GET_MODE (XEXP (XVECEXP (PATTERN (insn), 0, 0), 1)) != VOIDmode)\
       output_asm_insn ("stl 3", xop);					\
 									\
     /* argptr */							\
@@ -1474,5 +1475,6 @@ bss_section ()							\
 #undef T800_OUTPUT_NOP
 #define T800_OUTPUT_NOP  return ".byte 0x20";
 
+#undef T800_EXPAND_ALLOCATE_STACK
 #define T800_EXPAND_ALLOCATE_STACK \
-    fatal (\"The program being compiled requires dynamic stack space allocation which is not implemented in Expert run-time model.  So much sorry.\");
+    fatal ("The program being compiled requires dynamic stack space allocation which is not implemented in Expert run-time model.  So much sorry.");

@@ -3397,6 +3397,10 @@ output_constant_pool (fnname, fndecl)
 	  assemble_integer (x, GET_MODE_SIZE (pool->mode), 1);
 	  break;
 
+	case MODE_RANDOM:  /* hack for label_ref constants, which are VOIDmode */
+	  assemble_integer (x, UNITS_PER_WORD, 1);
+	  break;
+
 	default:
 	  abort ();
 	}

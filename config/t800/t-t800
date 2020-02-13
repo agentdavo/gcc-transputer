@@ -29,3 +29,20 @@ ENQUIRE =
 # enquire to build float.h is not feasible.  So use a premade one
 # (thanks to Roman Pozlevich <roma@roma.botik.ru>
 CROSS_FLOAT_H = $(srcdir)/config/t800/float.h
+
+# Enable FP emulation for transputers that lack FPU
+# (thanks to Roman Pozlevich <roma@roma.botik.ru>
+
+# These are really part of libgcc1, but this will cause them to be
+# built correctly, so...
+
+LIB2FUNCS_EXTRA = fp-bit.c dp-bit.c
+
+dp-bit.c: $(srcdir)/config/fp-bit.c
+	echo '#define FLOAT_BIT_ORDER_MISMATCH' > dp-bit.c
+	cat $(srcdir)/config/fp-bit.c >> dp-bit.c
+
+fp-bit.c: $(srcdir)/config/fp-bit.c
+	echo '#define FLOAT' > fp-bit.c
+	echo '#define FLOAT_BIT_ORDER_MISMATCH' >> fp-bit.c
+	cat $(srcdir)/config/fp-bit.c >> fp-bit.c

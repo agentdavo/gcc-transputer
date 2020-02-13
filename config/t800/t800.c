@@ -396,8 +396,8 @@ t800_legitimize_address (x, oldx, mode)
           rtx base = XEXP (x, 1);
           rtx index = XEXP (XEXP (x, 0), 0);
 
-          base = force_ABCreg (SImode, base);
-          index = force_ABCreg (SImode, index);
+          base = force_ABCreg (SImode, force_operand (base, 0));
+          index = force_ABCreg (SImode, force_operand (index, 0));
           emit_insn (gen__wsub (newx, base, index, factor));
 	  return newx;
         }
@@ -1398,19 +1398,41 @@ rtx
 t800_force_nonlocal (x)
     rtx x;
 {
-  rtx old_addr;
+  rtx addr;
 
   if (GET_CODE (x) != MEM)
     abort ();
 
-  old_addr = XEXP (x,0);
+  addr = XEXP (x,0);
 
-  if (ABCreg_operand (old_addr, Pmode))
+  if (ABCreg_operand (addr, Pmode))
     return x;
 
-  return gen_rtx (MEM, GET_MODE (x), copy_addr_to_reg (old_addr));
+  return gen_rtx (MEM, GET_MODE (x), copy_addr_to_reg (addr));
 }
 
+/* For an arbitrary MEM rtx, return a MEM rtx which is a valid
+   nonlocal_operand.  This is accomplished by copying the memory
+   address into the register REG, if necessary.  */
+
+rtx
+t800_force_nonlocal_using (x, reg)
+    rtx x;
+    rtx reg;
+{
+  rtx addr;
+
+  if (GET_CODE (x) != MEM)
+    abort ();
+
+  addr = XEXP (x,0);
+
+  if (ABCreg_operand (addr, Pmode))
+    return x;
+
+  emit_move_insn (reg, addr);
+  return gen_rtx (MEM, GET_MODE (x), reg);
+}
 
 /* Generate rtx for a workspace slot address.  */
 
@@ -1556,12 +1578,13 @@ emit_t800_insns (str, st)
 
       case 'S':
         offset = -3 * UNITS_PER_WORD;
-        last_stored_fp_virtual = st->reg[st->top[FABC_STACKNO]++];
+        last_stored_fp_virtual = st->reg[st->top[FABC_STACKNO]];
 
       fp_store:
         mode = st->mode[REG_BY_HARD_REGNO (st, R_FAREG)];
         pattern = gen_rtx (SET, mode,
-                           t800_gen_local (mode, offset),
+                           t800_force_nonlocal_using (t800_gen_local (mode, offset), 
+						      hard_reg[STACK_REG_FIRST(ABC_STACKNO)][Pmode]),
                            hard_reg[STACK_REG_FIRST(FABC_STACKNO)][mode]);
         CLEAR_HARD_REG_BIT (st->reg_set, st->reg[st->top[FABC_STACKNO]++]);
         break;
@@ -1572,7 +1595,8 @@ emit_t800_insns (str, st)
         mode = st->mode[REG_BY_HARD_REGNO (st, R_FAREG)];
         pattern = gen_rtx (SET, mode,
                            hard_reg[STACK_REG_FIRST(FABC_STACKNO)][mode],
-                           t800_gen_local (mode, offset));
+                           t800_force_nonlocal_using (t800_gen_local (mode, offset), 
+						      hard_reg[STACK_REG_FIRST(ABC_STACKNO)][Pmode]));
         SET_HARD_REG_BIT (st->reg_set, last_stored_fp_virtual);
         st->reg[--(st->top[FABC_STACKNO])] = last_stored_fp_virtual;
         break;
