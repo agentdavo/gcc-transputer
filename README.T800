@@ -1,0 +1,235 @@
+T800 backend overview
+---------------------
+
+T800 support is not part of GCC distribution yet; instead, it is
+available as a patch against the "official" GCC 2.6.3 distribution
+(gcc-2.6.3.tar.gz).
+
+It allows one to build a cross compiler that runs on a host capable
+of running GCC in general and produces T800 assembly language output.
+
+
+Features and peculiarities
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * SUPPORTED: asm_operands.
+
+ * SUPPORTED: floating point instructions.  However, no attempt is
+   made to optimize ALU and FPU operation overlapping.
+
+ * UNSUPPORTED: dynamic stack space allocation (alloca(3)).  Hard to
+   implement given the only register to address stack frame.
+
+ * UNSUPPORTED: debugging info output.  Just not ripe enough for now.
+
+ * if you want code quality to be any decent, compile with -O.  That's
+   because reload pass cannot do well on T800 without register life info.
+   Moreover, certain programs, notably those using asms with three
+   nontrivial input operands, might fail to compile unless optimization
+   is enabled (running out of spills in reload).  So do use -O.
+
+
+Run-time models supported
+~~~~~~~~~~~~~~~~~~~~~~~~~
+ There are currently two of them.  The first (generic) one is a
+home-made model, hardly corresponding to any other model in existence.
+In this model, no static chain is passed in function call; instead,
+global data are addressed relative to program counter (Iptr).  First
+three words of function arguments are passed on integer register
+stack.  The benefits of this model are compact function prologues and
+cheap function calls; on the other hand, it leaves no way to implement
+a stack expansion scheme.
+
+The binary tools (assimbler, linker, etc.) for use with this model are
+now available.  Check <http://www.botik.ru/~sizif/ttools/>, or
+<ftp://ftp.botik.ru/pub/local/ttools>.  Be warned that I have not
+ported any libraries, though.
+
+The second model (Expert) is [intended to be] compatible with the one
+used by ACE Expert compilers in Parix OS.  See the Parix documentation
+for its numerous merits.
+
+The two models are very different, and hopefully solve most problems
+that might arise when porting GCC to other transputer-based platforms.
+
+
+Random examples of inline assembly usage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  get_timer ()
+  {
+      int tmp;
+      asm ("ldtimer"
+	   : "=a" (tmp)
+	   : /* no inputs */ );
+      return tmp;
+  }
+
+This asm takes no inputs, and pushes one word of result onto the
+integer reg-stack, according to the `a' constraint.
+
+Constraint letters meaning:
+
+ a,b,c	Areg,Breg,Creg respectively
+ t,v,u	FAreg, FBreg, FCreg respectively
+ P	popped input constraint modifier.
+
+Another example:
+
+  void
+  outword (unsigned word, unsigned chan)
+  {
+    asm ("outword"
+         : /* no outputs */
+         : "bP" (chan), "aP" (word)
+         : "Creg", "FAreg", "FBreg", "FCreg", "Wreg[0]");
+  }
+
+This asm consumes two inputs which come in Areg and Breg.  The
+modifier constraint `P' indicates that the input is popped off the
+stack by the asm.  The clobber section indicates that the asm clobbers
+all stack registers (Areg and Breg might be mentioned here too, but
+the popping constraint makes this unnecessary, and you get better code
+by not explicitly clobbering a register which is also an input for the
+insn).
+
+"Wreg[0]" in the clobber section indicates that this asm destroys the
+value of the word at the top of workspace.  Note that "Wreg[0]" is
+just an identifier; you cannot write, say, "Wreg[1]" here.
+
+Yet another example:
+
+  float
+  square_root (float x)
+  {
+    register float tmp;
+
+    asm ("fpusqrtfirst\n\t"
+         "fpusqrtstep\n\t"
+         "fpusqrtstep\n\t"
+         "fpusqrtlast"
+         : "=t" (tmp)
+         : "tP" (x)
+         : "FBreg", "FCreg");
+
+    return tmp;
+  }
+
+This asm pops its input off floating reg-stack, and pushes the result
+back onto the floating reg-stack.
+
+And, finally, one more example from real life.
+
+  static inline int
+  lit_load_in_byte (void)
+  {
+      int tmp = 0;
+      extern int boot_link_in;
+  
+      asm __volatile
+  	("in"
+           : /* no outputs */
+           : "cP" (&tmp),
+             "bP" (boot_link_in),
+             "aP" (1)
+           : "FAreg", "FBreg", "FCreg", "memory");
+  
+      return tmp;
+  }
+
+Here the asm inputs a byte from a link whose address is stored in
+`boot_link_in'.  Note that this asm has no explicit outputs, but puts
+its result into memory (the `tmp' variable) as a side-effect.  You
+have to explicitly tell the compiler that the asm modifies memory;
+that's what the "memory" in the clobber section of the asm is for.
+Without it, the optimiser would rightfully optimize this function to
+always return 0.
+
+Note that the order of input operands in asms matters: supplying the
+operands in reverse order (Creg, Breg, Areg), as in the above asm,
+tends to give better code.
+
+
+Where to get T800 patches
+~~~~~~~~~~~~~~~~~~~~~~~~~
+ The most recent version is always at
+
+  ftp://ftp.botik.ru/pub/local/gcc-t800/
+
+The port as a diff against gcc-2.6.3 is in the file
+gcc-2.6.3-t800.NNN.dif.gz, where NNN is the alpha release number.
+You most probably want to pick the largest numbered one.
+
+patchNNN.gz contains patches from alpha release MMM to alpha release
+NNN, where MMM=NNN-1.  changesNNN contain a short overview of the
+changes.
+
+
+Feedback
+~~~~~~~~
+ Until t800 backend becomes a part of the standard GCC distribution,
+all t800-related questions, suggestions and bug reports should be sent
+to mailing list <gcc-t800@botik.ru> and NOT to bug-gcc where GCC bugs
+normally go.  To subscribe to the list, send e-mail with a line like
+this:
+
+  subscribe <YOUR-INTERNET-ADDRESS>
+
+to <gcc-t800-request@botik.ru>.
+
+Alternatively, contact me directly: Yury Shevchuk <sizif@botik.ru>
+
+
+Installation
+~~~~~~~~~~~~
+ (1) Apply T800 patches to the stock GCC 2.6.3 distribution:
+
+	cd gcc-2.6.3
+	gzip -dc gcc-2.6.3-t800.NNN.dif.gz | patch -p1
+
+ (2) Configure the sources for the target of your choice.
+
+     Example 1: configure for `generic' model
+
+	./configure --target=t800
+
+     Example 2: configure for `expert' model
+
+	./configure --target=t800-parix
+	
+     Example 3: configure for `expert' model, install in a private
+                directory rather than in /usr/local
+  
+	./configure --target=t800-parix --prefix=$(HOME)/usr
+
+ (3) If you are impatient and want to try it out quickly, do
+
+	make LANGUAGES=c CC=gcc cc1
+	cc1 -O pself.c
+	more pself.s
+
+ (4) Follow the normal procedure for building and installing a cross
+     compiler, described in INSTALL.  In short, the following might work:
+
+	<make sure transputer as,ld,ar are installed in PREFIX/t800/bin>
+	make LANGUAGES=c CC=gcc
+	make install
+
+
+Acknowledgements
+~~~~~~~~~~~~~~~~
+ FSF people provided the World with the GNU C Compiler.
+
+ Sergei Abramov enabled me to work on this port.
+
+ Kriton Kyrimis of High Performance Computing Laboratory, Athens,
+ inspired the port to Parix/GCel, and helped to work on it.
+
+ This work was in part supported by INTAS--International Association
+ for the promotion of cooperation with scientists from the independent
+ states of the former Soviet Union; grant # INTAS-93-0972
+
+ Thanks to all.
+
+
+
+
+$Revision: 1.10 $

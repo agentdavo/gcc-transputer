@@ -45,6 +45,7 @@ Boston, MA 02111-1307, USA.  */
 #include <stdio.h>
 #include "config.h"
 #include "rtl.h"
+#include "insn-attr.h"
 #include "hard-reg-set.h"
 #include "regs.h"
 #include "flags.h"
@@ -64,6 +65,16 @@ static int *uid_suid;
    so we can tell whether a pseudo reg crosses any calls.  */
 
 static int last_call_suid;
+
+/* Record the suid of the last JUMP_INSN
+   so we can tell whether a pseudo reg crosses any jumps.  */
+
+static int last_jump_suid;
+
+/* Record the suid of the last CODE_LABEL
+   so we can tell whether a pseudo reg crosses any labels.  */
+
+static int last_label_suid;
 
 /* Element N is suid of insn where life span of pseudo reg N ends.
    Element is  0 if register N has not been seen yet on backward scan.  */
@@ -88,6 +99,14 @@ static char *regs_live;
 
 static char *regs_change_size;
 
+/* Indexed by reg number, non-zero if reg lives across labels or jumps */
+
+static char *reg_crosses_blocks;
+
+/* Values for reg_crosses_blocks */
+
+enum { CROSSES_LABELS = 1, CROSSES_JUMPS = 2 };
+
 /* Indexed by insn's suid, the set of hard regs live after that insn.  */
 
 static HARD_REG_SET *after_insn_hard_regs;
@@ -99,8 +118,9 @@ static HARD_REG_SET *after_insn_hard_regs;
 
 static int stupid_reg_compare	PROTO((int *, int *));
 static int stupid_find_reg	PROTO((int, enum reg_class, enum machine_mode,
-				       int, int, int));
+				       int, int, int, int));
 static void stupid_mark_refs	PROTO((rtx, rtx));
+static int mark_popped_reg	PROTO((rtx, rtx));
 
 /* Stupid life analysis is for the case where only variables declared
    `register' go in registers.  For this case, we mark all
@@ -160,11 +180,19 @@ stupid_life_analysis (f, nregs, file)
   reg_where_born = (int *) alloca (nregs * sizeof (int));
   bzero ((char *) reg_where_born, nregs * sizeof (int));
 
+#ifdef HAVE_ATTR_popped_inputs
+  reg_popped_input = (char *) alloca (nregs);
+  bzero (reg_popped_input, nregs);
+#endif
+
   reg_order = (int *) alloca (nregs * sizeof (int));
   bzero ((char *) reg_order, nregs * sizeof (int));
 
   regs_change_size = (char *) alloca (nregs * sizeof (char));
   bzero ((char *) regs_change_size, nregs * sizeof (char));
+
+  reg_crosses_blocks = (char *) alloca (nregs * sizeof (char));
+  bzero ((char *) reg_crosses_blocks, nregs * sizeof (char));
 
   reg_renumber = (short *) oballoc (nregs * sizeof (short));
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
@@ -213,7 +241,14 @@ stupid_life_analysis (f, nregs, file)
 	 based on the pattern of this insn.  */
 
       if (GET_RTX_CLASS (GET_CODE (insn)) == 'i')
+#ifndef HAVE_ATTR_popped_inputs
 	stupid_mark_refs (PATTERN (insn), insn);
+#else
+        {
+	  stupid_mark_refs (PATTERN (insn), insn);
+	  note_popped_inputs (insn, mark_popped_reg);
+        }
+#endif
 
       /* Mark all call-clobbered regs as live after each call insn
 	 so that a pseudo whose life span includes this insn
@@ -257,6 +292,23 @@ stupid_life_analysis (f, nregs, file)
       if (regno_reg_rtx[r] == 0)
 	continue;
 
+#ifdef HAVE_ATTR_popped_inputs
+
+      /* Do not alloc for pseudo which is a popped input and either
+         not dead in the popping insn (ie reused later) or spans
+         across a label (because the label may also imply reuse, as in
+         the following picture):
+
+	 ----Born======Label=====Dead----Jump.back.to.label-----  */
+
+      if (reg_popped_input[r] == 3
+          || reg_popped_input[r] && reg_crosses_blocks[r] & CROSSES_LABELS)
+        {
+	  reg_renumber[r] = -1;
+          continue;
+        }
+#endif
+
       /* Now find the best hard-register class for this pseudo register */
       if (N_REG_CLASSES > 1)
 	reg_renumber[r] = stupid_find_reg (reg_n_calls_crossed[r], 
@@ -264,7 +316,8 @@ stupid_life_analysis (f, nregs, file)
 					   PSEUDO_REGNO_MODE (r),
 					   reg_where_born[r],
 					   reg_where_dead[r],
-					   regs_change_size[r]);
+					   regs_change_size[r],
+					   reg_crosses_blocks[r]);
 
       /* If no reg available in that class, try alternate class.  */
       if (reg_renumber[r] == -1 && reg_alternate_class (r) != NO_REGS)
@@ -273,7 +326,8 @@ stupid_life_analysis (f, nregs, file)
 					   PSEUDO_REGNO_MODE (r),
 					   reg_where_born[r],
 					   reg_where_dead[r],
-					   regs_change_size[r]);
+					   regs_change_size[r],
+					   reg_crosses_blocks[r]);
     }
 
   if (file)
@@ -321,12 +375,13 @@ stupid_reg_compare (r1p, r2p)
 
 static int
 stupid_find_reg (call_preserved, class, mode,
-		 born_insn, dead_insn, changes_size)
+		 born_insn, dead_insn, changes_size, crosses_blocks)
      int call_preserved;
      enum reg_class class;
      enum machine_mode mode;
      int born_insn, dead_insn;
      int changes_size;
+     int crosses_blocks;
 {
   register int i, ins;
 #ifdef HARD_REG_SET
@@ -476,17 +531,45 @@ stupid_mark_refs (x, insn)
 		 in SOME hard reg.  Mark it as dying after the current
 		 insn so that it will conflict with any other outputs of
 		 this insn.  */
+#if 0
 	      if (reg_where_dead[regno] < where_born + 2)
 		{
 		  reg_where_dead[regno] = where_born + 2;
 		  regs_live[regno] = 1;
 		}
+#else
+	      /* The above code extends register life one insn longer
+		 than necessary.  This is not a big problem most of
+		 the time, but when where_born+2 is a CALL_INSN which
+		 clobbers many regs, it prevents regno from being
+		 allocated.  Note that insns before a call insn are
+		 probably loading register arguments, so it won't be
+		 easy for reload to cope with this (actually, it does
+		 the job, but using one of the previously loaded
+		 argument registers, yuck -- and I'm not sure it's
+		 easy to fix.)
+
+		 I once submitted this patch to gcc-bug and RMS said
+		 it's nearly correct, but it didn't made it to official
+		 release.  So here it is again, with RMS's change.
+		   --sizif  */
+
+	      if (reg_where_dead[regno] < INSN_SUID (insn) + 1)
+		{
+		  reg_where_dead[regno] = INSN_SUID (insn) + 1;
+		  regs_live[regno] = 1;
+		}
+#endif
 
 	      /* Count the refs of this reg.  */
 	      reg_n_refs[regno]++;
 
 	      if (last_call_suid < reg_where_dead[regno])
 		reg_n_calls_crossed[regno] += 1;
+	      if (last_jump_suid < reg_where_dead[regno])
+		reg_crosses_blocks[regno] |= CROSSES_JUMPS;
+	      if (last_label_suid < reg_where_dead[regno])
+		reg_crosses_blocks[regno] |= CROSSES_LABELS;
 	    }
 	}
 
@@ -538,6 +621,7 @@ stupid_mark_refs (x, insn)
 	      reg_where_dead[regno] = INSN_SUID (insn);
 	    }
 	}
+      
       return;
     }
 
@@ -556,3 +640,29 @@ stupid_mark_refs (x, insn)
 	}
     }
 }
+
+
+#ifdef HAVE_ATTR_popped_inputs
+
+/* Called from NOTE_POPPED_INPUTS to record the regs popped by INSN. */
+
+static int
+mark_popped_reg (insn, popped_reg)
+  rtx insn, popped_reg;
+{
+  register regno;
+
+  if (GET_CODE (popped_reg) == SUBREG)
+    regno = REGNO (SUBREG_REG (popped_reg));
+  else
+    regno = REGNO (popped_reg);
+
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    {
+      reg_popped_input[regno] |= 1;
+      if (INSN_SUID (insn) != reg_where_dead[regno])
+        reg_popped_input[regno] |= 3;
+    }
+  return 0;
+}
+#endif /* HAVE_ATTR_popped_inputs */

@@ -1,0 +1,3 @@
+#!/bin/sh
+name=${1:?'Usage: xx-make <function name>'}
+./xgcc -B./ -E -O2 -Dinhibit_libc -DCROSS_COMPILE -DIN_GCC -DPOSIX  -g -I./include -g1 -I. -I. -I../config -c -DL${name} ../libgcc2.c > xx

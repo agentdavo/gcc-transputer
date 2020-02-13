@@ -1,0 +1,25 @@
+--- xx1	Fri Jan 26 18:00:37 1996
++++ xx2	Fri Jan 26 18:00:49 1996
+@@ -2 +1,0 @@
+-./README
+@@ -8,0 +8 @@
++./config/t800/t-parix
+@@ -17 +16,0 @@
+-./cse.c
+@@ -18,0 +18,2 @@
++./explow.c
++./expr.c
+@@ -21 +21,0 @@
+-./ginclude/stdarg.h
+@@ -23,2 +22,0 @@
+-./ginclude/varargs.h
+-./global.c
+@@ -28 +25,0 @@
+-./reg-stack.c
+@@ -31,2 +27,0 @@
+-./regs.h
+-./reload.c
+@@ -37 +31,0 @@
+-./tm-template.sh
+@@ -40 +33,0 @@
+-./xx-make

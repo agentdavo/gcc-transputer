@@ -101,6 +101,11 @@ Boston, MA 02111-1307, USA.  */
    Use gen_lowpart_for_combine instead.  See comments there.  */
 #define gen_lowpart dont_use_gen_lowpart_you_dummy
 
+#ifndef ABSENT_INSN_CODE
+#define ABSENT_INSN_CODE(CODE)  ((CODE) == CODE_FOR_nothing)
+#endif
+
+
 /* Number of attempts to combine instructions in this function.  */
 
 static int combine_attempts;
@@ -9644,12 +9649,12 @@ simplify_comparison (code, pop0, pop1)
   mode = GET_MODE (op0);
   if (mode != VOIDmode && GET_MODE_CLASS (mode) == MODE_INT
       && GET_MODE_SIZE (mode) < UNITS_PER_WORD
-      && cmp_optab->handlers[(int) mode].insn_code == CODE_FOR_nothing)
+      && ABSENT_INSN_CODE (cmp_optab->handlers[(int) mode].insn_code))
     for (tmode = GET_MODE_WIDER_MODE (mode);
 	 (tmode != VOIDmode
 	  && GET_MODE_BITSIZE (tmode) <= HOST_BITS_PER_WIDE_INT);
 	 tmode = GET_MODE_WIDER_MODE (tmode))
-      if (cmp_optab->handlers[(int) tmode].insn_code != CODE_FOR_nothing)
+      if (! ABSENT_INSN_CODE (cmp_optab->handlers[(int) tmode].insn_code))
 	{
 	  /* If the only nonzero bits in OP0 and OP1 are those in the
 	     narrower mode and this is an equality or unsigned comparison,

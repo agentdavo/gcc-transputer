@@ -763,7 +763,27 @@ insert_save_restore (insn, save_p, regno, insn_mode, maxrestore)
 
   insn = emit_insn_before (pat, insn);
   PUT_MODE (insn, insn_mode);
+
+#if 1
+
+  /* I don't understand the comment at this function's start regarding
+     the necessity of this code setting.  But what I see is that insn
+     generated here pops up with incorrect code (t800: stnl while the
+     pattern suggests stl) later in reg-stack pass.  The code turns
+     out incorrect because init_caller_save builds a trial insn
+     pattern on a lowest numbered register from BASE_REG_CLASS (==
+     Areg), which matches stnl.  Whereas the actual insn built using
+     regno_save_mem saves to (MEM (PLUS (REG Wreg) (CONST_INT))),
+     which should match stl.
+
+     I don't know what would be the right (machine-independent) way to
+     fix this.  The simplest move is not to set INSN_CODE here,
+     allowing the insn to be recognized in the regular way.  If the
+     recognition ever fails, we'll see why and what to do about it.  */
+
+#else
   INSN_CODE (insn) = code;
+#endif
 
   /* Tell our callers how many extra registers we saved/restored */
   return numregs - 1;

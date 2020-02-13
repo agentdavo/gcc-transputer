@@ -1,0 +1,26 @@
+# (For development stage): Don't try to build C++ or Objective C by
+# default.  The space before LANGUAGES avoids changing this line by
+# configure.
+ LANGUAGES=c
+
+# Add more dependencies for reg-stack.o because it #includes
+# reg-stack2.c.  Although including .c file in another .c file
+# is nasty, should get rid of this eventually...
+reg-stack.o: reg-stack2.c reg-stack.h $(CONFIG_H) $(RTL_H) $(TREE_H) \
+  tree.h rtl.h insn-config.h insn-codes.h insn-flags.h insn-attr.h regs.h \
+  flags.h recog.h output.h hard-reg-set.h
+
+# We don't have stdio for t800 yet, so don't let libgcc2.c use stdio.h
+LIBGCC2_INCLUDES = -Dinhibit_libc
+
+# libgcc1-test shows we need no functions from libgcc1.  So don't build it.
+LIBGCC1 =
+CROSS_LIBGCC1 =
+
+# Since libgcc1-test is linked without crt0, we need to change the lit
+# hook from the default @@hook to the entry point of libgcc1-test.c
+LIBGCC1_LDFLAGS = -Wl,--hook,_main_without__main
+
+# building enquire requires some libc headers, which we don't have.
+# So don't build it by default; "make enquire" is you really need it.
+ENQUIRE = 

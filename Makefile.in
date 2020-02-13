@@ -516,7 +516,7 @@ OBJS = toplev.o version.o tree.o print-tree.o stor-layout.o fold-const.o \
  function.o stmt.o expr.o calls.o expmed.o explow.o optabs.o varasm.o \
  rtl.o print-rtl.o rtlanal.o emit-rtl.o real.o \
  dbxout.o sdbout.o dwarfout.o xcoffout.o \
- integrate.o jump.o cse.o loop.o unroll.o flow.o stupid.o combine.o \
+ integrate.o jump.o cse.o loop.o unroll.o exotic.o flow.o stupid.o combine.o \
  regclass.o local-alloc.o global.o reload.o reload1.o caller-save.o \
  insn-peep.o reorg.o sched.o final.o recog.o reg-stack.o \
  insn-opinit.o insn-recog.o insn-extract.o insn-output.o insn-emit.o \
@@ -661,7 +661,7 @@ rest.cross: $(LIBGCC) gfloat.h specs
 # If it does, then there are sufficient replacements for libgcc1.a.
 libgcc1-test: libgcc1-test.o native $(GCC_PARTS)
 	@echo "Testing libgcc1.  Ignore linker warning messages."
-	$(GCC_FOR_TARGET) $(GCC_CFLAGS) libgcc1-test.o -o libgcc1-test \
+	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(LIBGCC1_LDFLAGS) libgcc1-test.o -o libgcc1-test \
 	  -nostartfiles -nostdlib `$(GCC_FOR_TARGET) --print-libgcc-file-name`
 libgcc1-test.o: libgcc1-test.c native xgcc
 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(ALL_CPPFLAGS) -c $(srcdir)/libgcc1-test.c
@@ -1214,6 +1214,7 @@ loop.o : loop.c $(CONFIG_H) $(RTL_H) flags.h loop.h insn-config.h \
    insn-flags.h insn-codes.h regs.h hard-reg-set.h recog.h expr.h real.h
 unroll.o : unroll.c $(CONFIG_H) $(RTL_H) insn-config.h insn-codes.h \
    integrate.h regs.h flags.h expr.h loop.h
+exotic.o : exotic.c $(CONFIG_H) $(RTL_H) insn-config.h recog.h
 flow.o : flow.c $(CONFIG_H) $(RTL_H) flags.h insn-config.h \
    basic-block.h regs.h hard-reg-set.h output.h
 combine.o : combine.c $(CONFIG_H) $(RTL_H) flags.h  \
@@ -1413,7 +1414,7 @@ stamp-output : $(md_file) genoutput $(srcdir)/move-if-change
 # Pass the md file through cpp if the target requests it.
 $(MD_FILE): $(MD_DEPS)
 	rm -f $@
-	$(MD_CPP) $(MD_CPPFLAGS) $(md_file) | sed 's/^# /; /g' > tmp-$@
+	$(MD_CPP) $(MD_CPPFLAGS) $(MD_PRE_CPP) | sed 's/^# /; /g' > tmp-$@
 	mv tmp-$@ $@
 
 genconfig : genconfig.o $(HOST_RTL) $(HOST_LIBDEPS)
@@ -2272,7 +2273,8 @@ TAGS: force
 dist: gcc.xtar.gz
 
 gcc.xtar.gz: gcc.xtar
-	gzip --best < gcc.xtar > tmp-gcc.xtar.gz
+	cd $(srcdir);							\
+	gzip --best < gcc.xtar > tmp-gcc.xtar.gz;			\
 	mv tmp-gcc.xtar.gz gcc.xtar.gz
 
 #gcc-$(version).tar.gz: gcc-$(version).tar
@@ -2281,6 +2283,7 @@ gcc.xtar.gz: gcc.xtar
 #gcc-$(version).tar:
 gcc.xtar: distdir
 # Make the distribution.
+	cd $(srcdir); \
 	tar -chf gcc.xtar gcc-$(version)
 
 # This target exists to do the initial work before the language specific
@@ -2288,29 +2291,31 @@ gcc.xtar: distdir
 distdir-start: doc $(srcdir)/INSTALL $(srcdir)/c-parse.y $(srcdir)/c-gperf.h \
   $(srcdir)/objc-parse.y $(srcdir)/c-parse.c $(srcdir)/objc-parse.c \
   $(srcdir)/cexp.c
-	@if grep -s "for version ${mainversion}" gcc.texi > /dev/null; \
+	@if grep -s "for version ${mainversion}" $(srcdir)/gcc.texi > /dev/null; \
 	then true; \
 	else echo "You must update the version number in \`gcc.texi'"; sleep 10;\
 	fi
 # Update the version number in README
-	awk '$$1 " " $$2 " " $$3 == "This directory contains" \
+	cd $(srcdir); \
+        awk '$$1 " " $$2 " " $$3 == "This directory contains" \
 		{ $$6 = version; print $$0 } \
 	     $$1 " " $$2 " " $$3 != "This directory contains"' \
 	  version=$(version) README > tmp.README
-	mv tmp.README README
-	-rm -rf gcc-$(version) tmp	
+	cd $(srcdir); mv tmp.README README
+	-cd $(srcdir); rm -rf gcc-$(version) tmp	
 # Put all the files in a temporary subdirectory
 # which has the name that we want to have in the tar file.
-	mkdir tmp
-	mkdir tmp/config
-	mkdir tmp/ginclude
-	mkdir tmp/objc
-	for file in *[0-9a-zA-Z+]; do \
+	cd $(srcdir); mkdir tmp
+	cd $(srcdir); mkdir tmp/config
+	cd $(srcdir); mkdir tmp/ginclude
+	cd $(srcdir); mkdir tmp/objc
+	cd $(srcdir); \
+        for file in *[0-9a-zA-Z+]; do \
 	  ln $$file tmp > /dev/null 2>&1 || cp $$file tmp; \
 	done
-	cd config; \
+	cd $(srcdir)/config; \
 	for file in *[0-9a-zA-Z+]; do \
-	  if test -d $$file && test "$$file" != RCS; then \
+	  if test -d $$file && test "$$file" != RCS && test "$$file" != CVS; then \
 	    mkdir ../tmp/config/$$file; \
 	    cd $$file; \
 	    for subfile in *[0-9a-zA-Z+]; do \
@@ -2323,24 +2328,26 @@ distdir-start: doc $(srcdir)/INSTALL $(srcdir)/c-parse.y $(srcdir)/c-gperf.h \
 	    || cp $$file ../tmp/config; \
 	  fi; \
 	done
-	cd ginclude; \
+	cd $(srcdir)/ginclude; \
 	for file in *[0-9a-zA-Z+]; do \
 	  ln $$file ../tmp/ginclude >/dev/null 2>&1 \
 	   || cp $$file ../tmp/ginclude; \
 	done
-	cd objc; \
+	cd $(srcdir)/objc; \
 	for file in *[0-9a-zA-Z+]; do \
 	  ln $$file ../tmp/objc >/dev/null 2>&1 || cp $$file ../tmp/objc; \
 	done
-	ln .gdbinit tmp
+	cd $(srcdir); ln .gdbinit tmp
 
 # Finish making `distdir', after the languages have done their thing.
 distdir-finish:
-	mv tmp gcc-$(version)
+	cd $(srcdir); mv tmp gcc-$(version)
 # Get rid of everything we don't want in the distribution.  We'd want
 # this to use Makefile.in, but it doesn't have the `lang.foo' targets
 # expanded.
-	cd gcc-$(version); make extraclean
+	ln Makefile $(srcdir)/gcc-$(version) >/dev/null 2>&1 \
+	    || cp Makefile $(srcdir)/gcc-$(version)
+	cd $(srcdir)/gcc-$(version); make extraclean
 
 distdir: distdir-start lang.distdir distdir-finish
 
@@ -2348,9 +2355,10 @@ distdir: distdir-start lang.distdir distdir-finish
 # creates a diff file between an older distribution and this one.
 # The -P option assumes this is GNU diff.
 diff:
+	cd $(srcdir); \
 	diff -rc2P -x c-parse.y -x c-parse.c -x c-parse.h -x c-gperf.h \
 	  -x cexp.c -x bi-parser.c -x objc-parse.y -x objc-parse.c \
-	  -x TAGS \
+	  -x TAGS -x TAGS-c -x TAGS-h \
 	  -x "gcc.??" -x "gcc.??s" -x gcc.aux -x "gcc.info*" \
 	  -x "cpp.??" -x "cpp.??s" -x cpp.aux -x "cpp.info*" \
 	  $(LANG_DIFF_EXCLUDES) \

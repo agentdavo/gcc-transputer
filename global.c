@@ -27,6 +27,7 @@ Boston, MA 02111-1307, USA.  */
 #include "hard-reg-set.h"
 #include "regs.h"
 #include "insn-config.h"
+#include "insn-attr.h"
 #include "output.h"
 
 /* This pass of the compiler performs global register allocation.
@@ -386,6 +387,9 @@ global_alloc (file)
        that we are supposed to refrain from putting in a hard reg.
        -2 means do make an allocno but don't allocate it.  */
     if (reg_n_refs[i] != 0 && reg_renumber[i] < 0 && reg_live_length[i] != -1
+#ifdef HAVE_ATTR_popped_inputs
+        && reg_popped_input[i] == 0
+#endif
 	/* Don't allocate pseudos that cross calls,
 	   if this function receives a nonlocal goto.  */
 	&& (! current_function_has_nonlocal_label

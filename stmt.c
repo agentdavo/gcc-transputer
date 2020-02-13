@@ -1662,6 +1662,12 @@ expand_asm_operands (string, outputs, inputs, clobbers, vol, filename, line)
 		  continue;
 		}
 
+#ifdef ASM_SPECIAL_CLOBBER
+	      /* Handle machine-specific negative values that might
+		 result from ADDITIONAL_REGISTER_NAMES  */
+	      ASM_SPECIAL_CLOBBER(j);
+#endif
+
 	      /* Ignore unknown register, error already signalled.  */
 	      continue;
 	    }
@@ -2706,7 +2712,7 @@ expand_return (retval)
       emit_barrier ();
       return;
     }
-#ifdef HAVE_return
+#if defined(HAVE_return) && BRANCH_COST < 2
   /* This optimization is safe if there are local cleanups
      because expand_null_return takes care of them.
      ??? I think it should also be safe when there is a cleanup label,
@@ -2743,7 +2749,7 @@ expand_return (retval)
 	    return;
 	  }
     }
-#endif /* HAVE_return */
+#endif /* defined(HAVE_return) && BRANCH_COST < 2 */
 
   /* If the result is an aggregate that is being returned in one (or more)
      registers, load the registers here.  The compiler currently can't handle

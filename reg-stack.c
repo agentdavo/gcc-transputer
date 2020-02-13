@@ -159,14 +159,19 @@ Boston, MA 02111-1307, USA.  */
 
 #include <stdio.h>
 #include "config.h"
+
+#ifdef STACK_REGS
+
+#ifdef STACK_REG_FIRST  /* Machine description expects reg-stack2.c */
+#include "reg-stack2.c"
+#else /* STACK_REG_FIRST */
+
 #include "tree.h"
 #include "rtl.h"
 #include "insn-config.h"
 #include "regs.h"
 #include "hard-reg-set.h"
 #include "flags.h"
-
-#ifdef STACK_REGS
 
 #define REG_STACK_SIZE (LAST_STACK_REG - FIRST_STACK_REG + 1)
 
@@ -3131,4 +3136,5 @@ dump_stack_info (file)
       fprintf (file, "\n");
     }
 }
+#endif /* STACK_REG_FIRST */
 #endif /* STACK_REGS */

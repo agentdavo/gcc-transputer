@@ -201,6 +201,7 @@ int jump_opt_dump = 0;
 int cse_dump = 0;
 int loop_dump = 0;
 int cse2_dump = 0;
+int exotic_dump = 0;
 int flow_dump = 0;
 int combine_dump = 0;
 int sched_dump = 0;
@@ -751,6 +752,7 @@ FILE *jump_opt_dump_file;
 FILE *cse_dump_file;
 FILE *loop_dump_file;
 FILE *cse2_dump_file;
+FILE *exotic_dump_file;
 FILE *flow_dump_file;
 FILE *combine_dump_file;
 FILE *sched_dump_file;
@@ -770,6 +772,7 @@ int jump_time;
 int cse_time;
 int loop_time;
 int cse2_time;
+int exotic_time;
 int flow_time;
 int combine_time;
 int sched_time;
@@ -916,6 +919,8 @@ fatal_insn (message, insn)
     fflush (loop_dump_file);
   if (cse2_dump_file)
     fflush (cse2_dump_file);
+  if (exotic_dump_file)
+    fflush (exotic_dump_file);
   if (flow_dump_file)
     fflush (flow_dump_file);
   if (combine_dump_file)
@@ -1979,6 +1984,7 @@ compile_file (name)
   cse_time = 0;
   loop_time = 0;
   cse2_time = 0;
+  exotic_time = 0;
   flow_time = 0;
   combine_time = 0;
   sched_time = 0;
@@ -2059,6 +2065,10 @@ compile_file (name)
   /* If cse2 dump desired, open the output file.  */
   if (cse2_dump)
     cse2_dump_file = open_dump_file (dump_base_name, ".cse2");
+
+  /* If exotic dump desired, open the output file.  */
+  if (exotic_dump)
+    exotic_dump_file = open_dump_file (dump_base_name, ".exotic");
 
   /* If flow dump desired, open the output file.  */
   if (flow_dump)
@@ -2474,6 +2484,9 @@ compile_file (name)
   if (cse2_dump)
     fclose (cse2_dump_file);
 
+  if (exotic_dump)
+    fclose (exotic_dump_file);
+
   if (flow_dump)
     fclose (flow_dump_file);
 
@@ -2528,6 +2541,7 @@ compile_file (name)
 	  print_time ("cse", cse_time);
 	  print_time ("loop", loop_time);
 	  print_time ("cse2", cse2_time);
+	  print_time ("exotic", exotic_time);
 	  print_time ("flow", flow_time);
 	  print_time ("combine", combine_time);
 	  print_time ("sched", sched_time);
@@ -2954,6 +2968,25 @@ rest_of_compilation (decl)
   if (optimize > 0)			/* Stupid allocation probably won't work */
     obey_regdecls = 0;		/* if optimizations being done.  */
 
+  /* Perform the optional `exotic' pass.  It may generate additional
+     pseudos and so must be run prior to flow analisys.  */
+
+  TIMEVAR (exotic_time,
+	   {
+	     exotic (insns, max_reg_num ());
+	   });
+
+  if (exotic_dump)
+    TIMEVAR (dump_time,
+	     {
+	       fprintf (exotic_dump_file, "\n;; Function %s\n\n",
+			IDENTIFIER_POINTER (DECL_NAME (decl)));
+	       print_rtl (exotic_dump_file, insns);
+	       fflush (exotic_dump_file);
+	     });
+  
+  exotic_completed = 1;
+
   regclass_init ();
 
   /* Print function header into flow dump now
@@ -3137,10 +3170,15 @@ rest_of_compilation (decl)
      Also do cross-jumping this time
      and delete no-op move insns.  */
 
+  /* But if jump insn(s) on this machine clobbers some regs, it is
+     unsafe to do jump optimization after the register allocation.  */
+
+#ifndef JUMP_CLOBBERS_REGS
   if (optimize > 0)
     {
       TIMEVAR (jump_time, jump_optimize (insns, 1, 1, 0));
     }
+#endif
 
   /* Dump rtl code after jump, if we are doing that.  */
 
@@ -3266,6 +3304,7 @@ rest_of_compilation (decl)
     DECL_ARGUMENTS (decl) = saved_arguments;
 
   reload_completed = 0;
+  exotic_completed = 0;
 
   /* Clear out the insn_length contents now that they are no longer valid.  */
   init_insn_lengths ();
@@ -3449,6 +3488,7 @@ main (argc, argv, envp)
  		  case 'a':
  		    combine_dump = 1;
  		    dbr_sched_dump = 1;
+ 		    exotic_dump = 1;
  		    flow_dump = 1;
  		    global_reg_dump = 1;
  		    jump_opt_dump = 1;
@@ -3469,6 +3509,9 @@ main (argc, argv, envp)
 		    break;
 		  case 'd':
 		    dbr_sched_dump = 1;
+		    break;
+		  case 'e':
+		    exotic_dump = 1;
 		    break;
 		  case 'f':
 		    flow_dump = 1;

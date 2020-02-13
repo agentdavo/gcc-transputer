@@ -101,6 +101,11 @@ extern int *reg_live_length;
 
 extern short *reg_renumber;
 
+/* Vector indexed by (pseudo) reg number showing whether it is popped
+   by some insn. See comment in local-alloc.c */
+
+extern char *reg_popped_input;
+
 /* Vector indexed by hardware reg
    saying whether that reg is ever used.  */
 

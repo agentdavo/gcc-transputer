@@ -7345,6 +7345,15 @@ cse_insn (insn, in_libcall_block)
 	if (GET_CODE (dest) == STRICT_LOW_PART)
 	  dest = SUBREG_REG (XEXP (dest, 0));
 
+        /* If DEST is a paradoxical subreg, insert the true reg in its
+           natural mode rather than in the SUBREG mode, since only
+           the bits that belong to the natural mode are actually
+           stored in DEST.  */
+        if (GET_CODE (dest) == SUBREG
+            && GET_MODE_SIZE (GET_MODE (dest))
+               > GET_MODE_SIZE (GET_MODE (SUBREG_REG (dest))))
+	  dest = SUBREG_REG (dest);
+
 	if (GET_CODE (dest) == REG || GET_CODE (dest) == SUBREG)
 	  /* Registers must also be inserted into chains for quantities.  */
 	  if (insert_regs (dest, sets[i].src_elt, 1))

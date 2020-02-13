@@ -1986,9 +1986,16 @@ emit_move_insn_1 (x, y)
 	  x = change_address (x, VOIDmode, stack_pointer_rtx);
 	}
 #endif
-			     
+
+#if 0  /* This caused trouble when upgrading t800 port to 2.7.2.
+	  Emitting clobber for the move destination is not correct, at
+	  least in the case of no-op move this causes the code that
+	  produced the source to be optimized away.  I tried to
+	  conditionalize this to avoid the no-op move case, but other
+	  cases still caused occasional reload problem.  --sizif */
       /* Show the output dies here.  */
       emit_insn (gen_rtx (CLOBBER, VOIDmode, x));
+#endif
 
       for (i = 0;
 	   i < (GET_MODE_SIZE (mode)  + (UNITS_PER_WORD - 1)) / UNITS_PER_WORD;

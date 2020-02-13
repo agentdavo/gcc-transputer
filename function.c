@@ -3210,6 +3210,7 @@ assign_parms (fndecl, second_time)
 
      The second time through, simply use ap to avoid generating rtx.  */
 
+#ifndef SETUP_INCOMING_ARGS_RTX
   if ((ARG_POINTER_REGNUM == STACK_POINTER_REGNUM
        || ! (fixed_regs[ARG_POINTER_REGNUM]
 	     || ARG_POINTER_REGNUM == FRAME_POINTER_REGNUM))
@@ -3217,6 +3218,9 @@ assign_parms (fndecl, second_time)
     internal_arg_pointer = copy_to_reg (virtual_incoming_args_rtx);
   else
     internal_arg_pointer = virtual_incoming_args_rtx;
+#else
+  SETUP_INCOMING_ARGS_RTX (internal_arg_pointer, second_time);
+#endif
   current_function_internal_arg_pointer = internal_arg_pointer;
 
   stack_args_size.constant = 0;

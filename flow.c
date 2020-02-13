@@ -712,7 +712,7 @@ find_basic_blocks (f, nonlocal_label_list)
 			     we must check for, since a conditional one
 			     would make these blocks live.  */
 			  && simplejump_p (insn)
-			  && (label = XEXP (SET_SRC (PATTERN (insn)), 0), 1)
+			  && (label = JUMP_LABEL (insn), 1)
 			  && INSN_UID (label) != 0
 			  && BLOCK_NUM (label) == j)
 			{

@@ -2933,10 +2933,31 @@ int
 simplejump_p (insn)
      rtx insn;
 {
-  return (GET_CODE (insn) == JUMP_INSN
-	  && GET_CODE (PATTERN (insn)) == SET
-	  && GET_CODE (SET_DEST (PATTERN (insn))) == PC
-	  && GET_CODE (SET_SRC (PATTERN (insn))) == LABEL_REF);
+  register rtx x;
+
+  if (GET_CODE (insn) != JUMP_INSN)
+    return 0;
+  
+  x = PATTERN (insn);
+
+  /* If it is a jump in parallel with one or more clobbers, still
+     accept it. */
+  if (GET_CODE (x) == PARALLEL) {
+    int j;
+
+    /* All components of the PARALLEL except the first must be CLOBBERSs */
+    for (j = XVECLEN (x, 0); --j > 0; ) {
+      if (GET_CODE (XVECEXP (x, 0, j)) != CLOBBER)
+	return 0;
+    }
+
+    /* Check the first component of the PARALLEL the usual way. */
+    x = XVECEXP (x, 0, 0);
+  }
+
+  return (GET_CODE (x) == SET
+	  && GET_CODE (SET_DEST (x)) == PC
+	  && GET_CODE (SET_SRC (x)) == LABEL_REF);
 }
 
 /* Return nonzero if INSN is a (possibly) conditional jump
@@ -2947,6 +2968,22 @@ condjump_p (insn)
      rtx insn;
 {
   register rtx x = PATTERN (insn);
+
+  /* If it is a jump in parallel with one or more clobbers, still
+     accept it. */
+  if (GET_CODE (x) == PARALLEL) {
+    int j;
+
+    /* All components of the PARALLEL except the first must be CLOBBERSs */
+    for (j = XVECLEN (x, 0); --j > 0; ) {
+      if (GET_CODE (XVECEXP (x, 0, j)) != CLOBBER)
+	return 0;
+    }
+
+    /* Check the first component of the PARALLEL the usual way. */
+    x = XVECEXP (x, 0, 0);
+  }
+
   if (GET_CODE (x) != SET)
     return 0;
   if (GET_CODE (SET_DEST (x)) != PC)

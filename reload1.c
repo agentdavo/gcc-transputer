@@ -165,6 +165,13 @@ HARD_REG_SET forbidden_regs;
    group.)  */
 static HARD_REG_SET bad_spill_regs;
 
+#ifdef SMARTER_RELOAD_PASS
+/* This reg set indicates registers that has been chosen for reloading by
+   choose_reload_regs_from_free.  If some of these regs are then spilled,
+   we must rescan the insns.  */
+static HARD_REG_SET used_free_regs;
+#endif
+
 /* Describes order of use of registers for reloading
    of spilled pseudo-registers.  `spills' is the number of
    elements that are actually valid; new ones are added at the end.  */
@@ -341,7 +348,7 @@ static int modes_equiv_for_class_p	PROTO((enum machine_mode,
 static void spill_failure		PROTO((rtx));
 static int new_spill_reg		PROTO((int, int, int *, int *, int,
 					       FILE *));
-static void delete_dead_insn		PROTO((rtx));
+static void delete_dead_insn		PROTO((rtx, int));
 static void alter_reg  			PROTO((int, int));
 static void mark_scratch_live		PROTO((rtx));
 static void set_label_offsets		PROTO((rtx, rtx, int));
@@ -356,6 +363,7 @@ static int compare_spill_regs		PROTO((short *, short *));
 static void reload_as_needed		PROTO((rtx, int));
 static void forget_old_reloads_1	PROTO((rtx, rtx));
 static int reload_reg_class_lower	PROTO((short *, short *));
+static void init_reload_reg_in_use	PROTO(());
 static void mark_reload_reg_in_use	PROTO((int, int, enum reload_type,
 					       enum machine_mode));
 static void clear_reload_reg_in_use	PROTO((int, int, enum reload_type,
@@ -372,6 +380,13 @@ static void delete_output_reload	PROTO((rtx, int, rtx));
 static void inc_for_reload		PROTO((rtx, rtx, int));
 static int constraint_accepts_reg_p	PROTO((char *, rtx));
 static int count_occurrences		PROTO((rtx, rtx));
+static void get_hards_live_at_start	PROTO((int, HARD_REG_SET *));
+static void get_hards_spilled_in_block	PROTO((int, HARD_REG_SET *));
+static void note_reg_usage		PROTO((rtx, HARD_REG_SET *,
+					       HARD_REG_SET *));
+static void mark_reg_store		PROTO((rtx, rtx));
+static void choose_reload_regs_from_free	PROTO((rtx,rtx));
+static int allocate_reload_reg_from_free	PROTO((int, rtx));
 
 /* Initialize the reload pass once per compilation.  */
 
@@ -773,6 +788,18 @@ reload (first, global, dumpfile)
       int starting_frame_size = get_frame_size ();
       int previous_frame_pointer_needed = frame_pointer_needed;
       static char *reg_class_names[] = REG_CLASS_NAMES;
+#ifdef SMARTER_RELOAD_PASS
+      /* The regs that are live during the current insn  */
+      HARD_REG_SET hard_regs_live;
+
+      /* The regs that are spilled in this block; this is a subset of
+         FORBIDDEN_REGS  */
+      HARD_REG_SET this_block_spills;
+
+      /* Saveplace for the old value of FORBIDDEN_REGS while satisfying
+         needs.  */
+      HARD_REG_SET prev_forbidden_regs;
+#endif
 
       something_changed = 0;
       bzero ((char *) max_needs, sizeof max_needs);
@@ -787,6 +814,15 @@ reload (first, global, dumpfile)
 
       /* Keep track of which basic blocks are needing the reloads.  */
       this_block = 0;
+
+#ifdef SMARTER_RELOAD_PASS
+      if (global)
+        {
+          get_hards_live_at_start (this_block, &hard_regs_live);
+          get_hards_spilled_in_block (this_block, &this_block_spills);
+          CLEAR_HARD_REG_SET (used_free_regs);
+        }
+#endif
 
       /* Remember whether any element of basic_block_needs
 	 changes from 0 to 1 in this pass.  */
@@ -902,7 +938,14 @@ reload (first, global, dumpfile)
 	{
 	  if (global && this_block + 1 < n_basic_blocks
 	      && insn == basic_block_head[this_block+1])
+#ifndef SMARTER_RELOAD_PASS
 	    ++this_block;
+#else
+            {
+              get_hards_live_at_start (++this_block, &hard_regs_live);
+              get_hards_spilled_in_block (this_block, &this_block_spills);
+            }
+#endif
 
 	  /* If this is a label, a JUMP_INSN, or has REG_NOTES (which
 	     might include REG_LABEL), we need to see what effects this
@@ -1022,6 +1065,11 @@ reload (first, global, dumpfile)
 		  something_needs_elimination = 1;
 		}
 
+#ifdef SMARTER_RELOAD_PASS
+              if (global)
+		note_reg_usage (insn, &hard_regs_live, &this_block_spills);
+#endif /* SMARTER_RELOAD_PASS */
+
 	      /* If this insn has no reloads, we need not do anything except
 		 in the case of a CALL_INSN when we have caller-saves and
 		 caller-save needs reloads.  */
@@ -1030,6 +1078,14 @@ reload (first, global, dumpfile)
 		  && ! (GET_CODE (insn) == CALL_INSN
 			&& caller_save_spill_class != NO_REGS))
 		continue;
+
+#ifdef SMARTER_RELOAD_PASS
+              /* When did flow analisys, we are able to find which
+                 hard regs are unused at this insn, and use them for
+                 reloading so as to reduce spilling. */
+              if (global)
+                choose_reload_regs_from_free (insn, avoid_return_reg);
+#endif /* SMARTER_RELOAD_PASS */
 
 	      something_needs_reloads = 1;
 	      bzero ((char *) &insn_needs, sizeof insn_needs);
@@ -1567,6 +1623,10 @@ reload (first, global, dumpfile)
 	 by the previously-spilled registers.  With the current code, globals
 	 can be allocated into these registers, but locals cannot.  */
 
+#ifdef SMARTER_RELOAD_PASS
+      COPY_HARD_REG_SET (prev_forbidden_regs, forbidden_regs);
+#endif
+
       if (n_spills)
 	{
 	  for (i = j = FIRST_PSEUDO_REGISTER - 1; i >= 0; i--)
@@ -1889,6 +1949,21 @@ reload (first, global, dumpfile)
 				    global, dumpfile);
 	    }
 	}
+
+#ifdef SMARTER_RELOAD_PASS
+      /* See if some of the newly spilled registers were used for
+         reloading as free registers.  If so, we must rescan insns,
+         this time not considering these registers free.  */
+      {
+        HARD_REG_SET temp;
+        COPY_HARD_REG_SET (temp, forbidden_regs);
+        AND_COMPL_HARD_REG_SET (temp, prev_forbidden_regs);
+        AND_HARD_REG_SET (temp, used_free_regs);
+        GO_IF_HARD_REG_EQUAL (temp, reg_class_contents[NO_REGS], m1);
+        something_changed = 1;
+      m1:
+      }
+#endif
     }
 
   /* If global-alloc was run, notify it of any register eliminations we have
@@ -1919,13 +1994,9 @@ reload (first, global, dumpfile)
 	&& GET_CODE (reg_equiv_init[i]) != NOTE)
       {
 	if (reg_set_p (regno_reg_rtx[i], PATTERN (reg_equiv_init[i])))
-	  delete_dead_insn (reg_equiv_init[i]);
+	  delete_dead_insn (reg_equiv_init[i], 0);
 	else
-	  {
-	    PUT_CODE (reg_equiv_init[i], NOTE);
-	    NOTE_SOURCE_FILE (reg_equiv_init[i]) = 0;
-	    NOTE_LINE_NUMBER (reg_equiv_init[i]) = NOTE_INSN_DELETED;
-	  }
+	  delete_dead_insn (reg_equiv_init[i], 1);
       }
 
   /* Use the reload registers where necessary
@@ -1988,6 +2059,14 @@ reload (first, global, dumpfile)
 	    }
 	  else if (reg_equiv_mem[i])
 	    XEXP (reg_equiv_mem[i], 0) = addr;
+	}
+      else if (reg_equiv_constant[i] && reg_renumber[i] < 0)
+	{
+	  rtx reg = regno_reg_rtx[i];
+	  XEXP (reg, 0) = XEXP (reg_equiv_constant[i], 0);
+	  REG_USERVAR_P (reg) = 0;
+	  MEM_IN_STRUCT_P (reg) = 0;
+	  PUT_CODE (reg, GET_CODE (reg_equiv_constant[i]));
 	}
     }
 
@@ -2278,19 +2357,26 @@ statements or clauses.");
    data that is dead in INSN.  */
 
 static void
-delete_dead_insn (insn)
+delete_dead_insn (insn, this_insn_only)
      rtx insn;
+     int this_insn_only;
 {
   rtx prev = prev_real_insn (insn);
   rtx prev_dest;
 
   /* If the previous insn sets a register that dies in our insn, delete it
      too.  */
-  if (prev && GET_CODE (PATTERN (prev)) == SET
+  if (! this_insn_only && prev && GET_CODE (PATTERN (prev)) == SET
       && (prev_dest = SET_DEST (PATTERN (prev)), GET_CODE (prev_dest) == REG)
       && reg_mentioned_p (prev_dest, PATTERN (insn))
       && find_regno_note (insn, REG_DEAD, REGNO (prev_dest)))
-    delete_dead_insn (prev);
+    delete_dead_insn (prev, this_insn_only);
+
+#ifdef SMARTER_RELOAD_PASS
+  /* Indicate for reload_as_needed that this insn might have a valid
+     death note which needs processing by note_reg_usage */
+  PUT_MODE (insn, CCmode);
+#endif
 
   PUT_CODE (insn, NOTE);
   NOTE_LINE_NUMBER (insn) = NOTE_INSN_DELETED;
@@ -3239,7 +3325,7 @@ eliminate_regs_in_insn (insn, replace)
 	       If REPLACE isn't set, we can't delete this insn, but needn't
 	       process it since it won't be used unless something changes.  */
 	    if (replace)
-	      delete_dead_insn (insn);
+	      delete_dead_insn (insn, 0);
 	    val = 1;
 	    goto done;
 	  }
@@ -3739,6 +3825,10 @@ reload_as_needed (first, live_known)
   int this_block = 0;
   rtx x;
   rtx after_call = 0;
+#ifdef SMARTER_RELOAD_PASS
+  HARD_REG_SET hard_regs_live;
+  HARD_REG_SET this_block_spills;
+#endif
 
   bzero ((char *) spill_reg_rtx, sizeof spill_reg_rtx);
   bzero ((char *) spill_reg_store, sizeof spill_reg_store);
@@ -3750,6 +3840,14 @@ reload_as_needed (first, live_known)
       reg_reloaded_contents[i] = -1;
       reg_reloaded_insn[i] = 0;
     }
+
+#ifdef SMARTER_RELOAD_PASS
+  if (live_known)
+    {
+      get_hards_live_at_start (this_block, &hard_regs_live);
+      get_hards_spilled_in_block (this_block, &this_block_spills);
+    }
+#endif
 
   /* Reset all offsets on eliminable registers to their initial values.  */
 #ifdef ELIMINABLE_REGS
@@ -3784,7 +3882,14 @@ reload_as_needed (first, live_known)
       /* Notice when we move to a new basic block.  */
       if (live_known && this_block + 1 < n_basic_blocks
 	  && insn == basic_block_head[this_block+1])
+#ifndef SMARTER_RELOAD_PASS
 	++this_block;
+#else
+        {
+          get_hards_live_at_start (++this_block, &hard_regs_live);
+          get_hards_spilled_in_block (this_block, &this_block_spills);
+        }
+#endif
 
       /* If we pass a label, copy the offsets from the label information
 	 into the current offsets of each elimination.  */
@@ -3801,6 +3906,16 @@ reload_as_needed (first, live_known)
 		num_not_at_initial_offset++;
 	    }
 	}
+
+#ifdef SMARTER_RELOAD_PASS
+      /* If this insn was deleted after we counted it with note_reg_usage
+	 in reload(), we should process any death notes it might have anyway */
+      if (live_known && GET_CODE (insn) == NOTE
+          && NOTE_LINE_NUMBER (insn) == NOTE_INSN_DELETED
+	  && GET_MODE (insn) == CCmode)
+        note_reg_usage (insn, &hard_regs_live, &this_block_spills);
+#endif /* SMARTER_RELOAD_PASS */
+
 
       else if (GET_RTX_CLASS (GET_CODE (insn)) == 'i')
 	{
@@ -3867,11 +3982,29 @@ reload_as_needed (first, live_known)
 			    spill_reg_order);
 	    }
 
+#ifdef SMARTER_RELOAD_PASS
+          if (live_known)
+            {
+              /* In case we omitted find_reloads note_reg_usage will
+                 use an old value of reload_n_operands.  But this is
+                 OK, since it is guaranteed to be within bounds, and
+                 the results of its use will not matter as this insn
+                 does not need reloads.  */
+              note_reg_usage (insn, &hard_regs_live, &this_block_spills);
+            }
+#endif /* SMARTER_RELOAD_PASS */
+
 	  if (n_reloads > 0)
 	    {
 	      rtx prev = PREV_INSN (insn), next = NEXT_INSN (insn);
 	      rtx p;
 	      int class;
+
+#ifdef SMARTER_RELOAD_PASS
+              if (live_known)
+                choose_reload_regs_from_free (insn, avoid_return_reg);
+#endif /* SMARTER_RELOAD_PASS */
+
 
 	      /* If this block has not had spilling done for a
 		 particular clas and we have any non-optionals that need a
@@ -3980,16 +4113,21 @@ reload_as_needed (first, live_known)
 	      reg_reloaded_insn[i] = 0;
 	    }
 
-      /* In case registers overlap, allow certain insns to invalidate
-	 particular hard registers.  */
-
 #ifdef INSN_CLOBBERS_REGNO_P
-      for (i = 0 ; i < n_spills ; i++)
-	if (INSN_CLOBBERS_REGNO_P (insn, spill_regs[i]))
-	  {
-	    reg_reloaded_contents[i] = -1;
-	    reg_reloaded_insn[i] = 0;
-	  }
+      /* In case registers overlap, allow certain insns to invalidate
+	 particular hard registers.
+         Check just emitted output reload insns also, to cope with the
+         case where output reload insn clobbers the reload reg. */
+      {
+        rtx p;
+        for (p = insn; p != next; p = NEXT_INSN (p))
+          for (i = 0 ; i < n_spills ; i++)
+            if (INSN_CLOBBERS_REGNO_P (p, spill_regs[i]))
+              {
+                reg_reloaded_contents[i] = -1;
+                reg_reloaded_insn[i] = 0;
+              }
+      }
 #endif
 
       insn = next;
@@ -4130,6 +4268,30 @@ static HARD_REG_SET reload_reg_used_at_all;
 /* If reg is use as an inherited reload.  We just mark the first register
    in the group.  */
 static HARD_REG_SET reload_reg_used_for_inherit;
+
+
+#ifdef SMARTER_RELOAD_PASS
+static void
+init_reload_reg_in_use ()
+{
+  int i;
+
+  CLEAR_HARD_REG_SET (reload_reg_used);
+  CLEAR_HARD_REG_SET (reload_reg_used_at_all);
+  CLEAR_HARD_REG_SET (reload_reg_used_in_op_addr);
+  CLEAR_HARD_REG_SET (reload_reg_used_in_op_addr_reload);
+  CLEAR_HARD_REG_SET (reload_reg_used_in_insn);
+  CLEAR_HARD_REG_SET (reload_reg_used_in_other_addr);
+
+  for (i = 0; i < reload_n_operands; i++)
+    {
+      CLEAR_HARD_REG_SET (reload_reg_used_in_output[i]);
+      CLEAR_HARD_REG_SET (reload_reg_used_in_input[i]);
+      CLEAR_HARD_REG_SET (reload_reg_used_in_input_addr[i]);
+      CLEAR_HARD_REG_SET (reload_reg_used_in_output_addr[i]);
+    }
+}
+#endif SMARTER_RELOAD_PASS
 
 /* Mark reg REGNO as in use for a reload of the sort spec'd by OPNUM and
    TYPE. MODE is used to indicate how many consecutive regs are
@@ -7174,3 +7336,347 @@ count_occurrences (x, find)
     }
   return count;
 }
+
+#ifdef SMARTER_RELOAD_PASS
+
+/* Static argument for MARK_REG_STORE */
+static HARD_REG_SET *mark_hard_regs_live;
+
+
+/* Record in HARD_REGS_LIVE the hard registers live at the start of basic
+   block B. (Mimic code from global.c) */
+   
+static void
+get_hards_live_at_start (b, hard_regs_live)
+    int b;
+    HARD_REG_SET *hard_regs_live;
+{
+  register int offset, i;
+  REGSET_ELT_TYPE bit;
+  register regset old = basic_block_live_at_start[b];
+
+#ifdef HARD_REG_SET
+  *hard_regs_live = old[0];
+#else
+  COPY_HARD_REG_SET (*hard_regs_live, old);
+#endif
+  for (offset = 0, i = 0; offset < regset_size; offset++)
+    if (old[offset] == 0)
+      i += REGSET_ELT_BITS;
+    else
+      for (bit = 1; bit; bit <<= 1, i++)
+	{
+	  if (i >= max_regno)
+	    break;
+	  if (old[offset] & bit)
+	    {
+	      register int regno = reg_renumber[i];
+	      if (regno >= 0)
+		{
+                  register int last =
+                      regno + HARD_REGNO_NREGS (regno, PSEUDO_REGNO_MODE (i));
+                  while (regno < last)
+                    {
+                      SET_HARD_REG_BIT (*hard_regs_live, regno);
+                      regno++;
+                    }
+		}
+	    }
+	}
+}
+
+/* Record in SPILLS the hard registers spilled in BLOCK. SPILLS will
+   always be a subset of FORBIDDEN_REGS, but might be narrower than
+   that if SPILL_HARD_REG has chosen not to spill certain regs for
+   this block. */
+
+static void
+get_hards_spilled_in_block (block, spills)
+    int block;
+    HARD_REG_SET *spills;
+{
+  int i;
+
+  COPY_HARD_REG_SET (*spills, forbidden_regs);
+
+  /* If we have the basic block needs computed, see if some forbidden
+     regs are not really spilled for this particular BLOCK  */
+  if (basic_block_needs[0])
+    for (i=0; i < n_spills; i++)
+      {
+        int r = spill_regs[i];
+        enum reg_class class = REGNO_REG_CLASS (r);
+
+        if (basic_block_needs[(int) class][block] == 0)
+          {
+            enum reg_class *p;
+
+            for (p = reg_class_superclasses[(int) class];
+  	        *p != LIM_REG_CLASSES; p++)
+              if (basic_block_needs[(int) *p][block] > 0)
+  	          break;
+
+            if (*p == LIM_REG_CLASSES)
+              CLEAR_HARD_REG_BIT (*spills, r);
+          }
+      }
+}
+
+
+/* Note which pseudos and hard regs are born or die in the INSN; reflect
+   this in HARD_REGS_LIVE.  Collect information as to what regs are free
+   and in which insn parts; record it in reload_reg_used*  */
+
+static void
+note_reg_usage (insn, phard_regs_live, hard_regs_spilled)
+    rtx insn;
+    HARD_REG_SET *phard_regs_live;
+    HARD_REG_SET *hard_regs_spilled;
+{
+    register rtx link;
+
+    /* We might be called on a NOTE_INSN_DELETED which carries an
+       essential death note.  We do nothing except note processing in
+       this case, as this insn requires not reloads.  */
+
+    if (GET_RTX_CLASS (GET_CODE (insn)) == 'i')
+      {
+	init_reload_reg_in_use ();
+
+	/* All regs live before the insn cannot be used for input reloads. */
+	IOR_HARD_REG_SET (reload_reg_used_in_input[0], *phard_regs_live);
+	IOR_HARD_REG_SET (reload_reg_used_in_input_addr[0], *phard_regs_live);
+	IOR_HARD_REG_SET (reload_reg_used_in_other_addr, *phard_regs_live);
+	IOR_HARD_REG_SET (reload_reg_used_at_all, *phard_regs_live);
+
+	/* Spilled regs cannot be used here at all -- they are not free.  */
+	IOR_HARD_REG_SET (reload_reg_used, *hard_regs_spilled);
+	IOR_HARD_REG_SET (reload_reg_used_in_other_addr, *hard_regs_spilled);
+	IOR_HARD_REG_SET (reload_reg_used_at_all, *hard_regs_spilled);
+      }
+
+    for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
+      if (REG_NOTE_KIND (link) == REG_DEAD)
+        {
+          unsigned regno = true_regnum (XEXP (link, 0));
+
+          /* This check rejects -1 too, as regno is unsigned */
+          if (regno < FIRST_PSEUDO_REGISTER)
+            {
+              int nr = HARD_REGNO_NREGS (regno, GET_MODE (XEXP (link, 0)));
+              while (nr--)
+                CLEAR_HARD_REG_BIT (*phard_regs_live, regno + nr);
+            }
+        }
+
+    if (GET_RTX_CLASS (GET_CODE (insn)) != 'i')
+      return;
+
+    mark_hard_regs_live = phard_regs_live;
+    note_stores (PATTERN (insn), mark_reg_store);
+
+    /* Any regs live after the insn cannot be used for output reloads.  */
+    IOR_HARD_REG_SET (reload_reg_used_in_output[reload_n_operands - 1],
+                     *phard_regs_live);
+    IOR_HARD_REG_SET (reload_reg_used_at_all, *phard_regs_live);
+
+    for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
+      if (REG_NOTE_KIND (link) == REG_UNUSED)
+        {
+          unsigned regno = true_regnum (XEXP (link, 0));
+
+          if (regno < FIRST_PSEUDO_REGISTER)
+            {
+              int nr = HARD_REGNO_NREGS (regno, GET_MODE (XEXP (link, 0)));
+              while (nr--)
+                CLEAR_HARD_REG_BIT (*phard_regs_live, regno + nr);
+            }
+        }
+}
+
+
+/* Called by NOTE_STORES called from NOTE_REG_USAGE. */
+
+static void
+mark_reg_store (reg, expr)
+    rtx reg, expr;
+{
+  unsigned regno = true_regnum (reg);
+  int mode = GET_MODE (reg);
+  int nr = HARD_REGNO_NREGS (regno, mode);
+
+  if (regno < FIRST_PSEUDO_REGISTER)
+    switch (GET_CODE (expr))
+      {
+      case SET:
+        while (nr--)
+          SET_HARD_REG_BIT (*mark_hard_regs_live, regno + nr);
+        /* Need not to call mark_hard_regs_live here, as NOTE_REG_USAGE
+           will do this while processing the regs live after insn */
+        break;
+      case CLOBBER:
+        mark_reload_reg_in_use (regno, 0, RELOAD_FOR_INSN, mode);
+        break;
+      default:
+        abort ();
+      }
+}
+
+
+/* Try to assign hard reg targets for the pseudo-registers we must reload
+   into hard regs for this insn, choosing from the regs that are free
+   during this insn. The regs chosen are recorded in reload_reg_rtx.
+
+   Unlike choose_reload_regs, this routine is allowed to be sloppy, 
+   since its job is a sort of optimization.  */
+
+static void
+choose_reload_regs_from_free (insn, avoid_return_reg)
+     rtx insn;
+     rtx avoid_return_reg;
+{
+  register int i, j, r;
+
+#ifdef SMALL_REGISTER_CLASSES
+  /* Don't bother with avoiding the return reg
+     if we have no mandatory reload that could use it.  */
+  if (avoid_return_reg)
+    {
+      int do_avoid = 0;
+      int regno = REGNO (avoid_return_reg);
+      int nregs	= HARD_REGNO_NREGS (regno, GET_MODE (avoid_return_reg));
+      int r;
+
+      for (r = regno; r < regno + nregs; r++)
+        if (reload_reg_free_p (r, 0, RELOAD_FOR_INPUT_ADDRESS))
+	  for (j = 0; j < n_reloads; j++)
+	    if (!reload_optional[j] && reload_reg_rtx[j] == 0
+		&& (reload_in[j] != 0 || reload_out[j] != 0
+		    || reload_secondary_p[j])
+		&&
+		TEST_HARD_REG_BIT (reg_class_contents[(int) reload_reg_class[j]], r))
+	      do_avoid = 1;
+      if (!do_avoid)
+	avoid_return_reg = 0;
+    }
+#endif /* SMALL_REGISTER_CLASSES */
+
+#ifdef SMALL_REGISTER_CLASSES
+  /* Don't use the subroutine call return reg for a reload
+     if we are supposed to avoid it.  */
+  if (avoid_return_reg)
+    {
+      int regno = REGNO (avoid_return_reg);
+      int nregs	= HARD_REGNO_NREGS (regno, GET_MODE (avoid_return_reg));
+      int r;
+
+      for (r = regno; r < regno + nregs; r++)
+        {
+          mark_reload_reg_in_use (r, 0, RELOAD_FOR_INPUT, QImode);
+          mark_reload_reg_in_use (r, 0, RELOAD_FOR_INPUT_ADDRESS, QImode);
+        }
+    }
+#endif /* SMALL_REGISTER_CLASSES */
+
+  /* For the first time, do not bother sorting reloads */
+
+  for (j = 0; j < n_reloads; j++)
+    {
+      reload_mode[j]
+	= (reload_inmode[j] == VOIDmode
+	   || (GET_MODE_SIZE (reload_outmode[j])
+	       > GET_MODE_SIZE (reload_inmode[j])))
+	  ? reload_outmode[j] : reload_inmode[j];
+
+      reload_nregs[j] = CLASS_MAX_NREGS (reload_reg_class[j], reload_mode[j]);
+
+      /* If we have already decided to use a certain register,
+	 don't use it in another way.  */
+      if (reload_reg_rtx[j])
+	mark_reload_reg_in_use (REGNO (reload_reg_rtx[j]), reload_opnum[j],
+				reload_when_needed[j], reload_mode[j]);
+    }
+
+  for (r = 0; r < n_reloads; r++)
+    {
+      /* Ignore reloads that got marked inoperative.  */
+      if (reload_out[r] == 0 && reload_in[r] == 0 && ! reload_secondary_p[r])
+        continue;
+
+      /* Skip reloads that already have a register allocated or are
+         optional. */
+      if (reload_reg_rtx[r] != 0 || reload_optional[r])
+        continue;
+
+      /* Try allocating for every reload in a dumb fashion, for it's
+         not easy to determine that no chance left */
+      allocate_reload_reg_from_free (r, insn);
+    }
+}
+
+
+/* Find a free register to use as a reload register for reload R.
+   Set reload_reg_rtx[R] to the register allocated.
+
+   Although it is not currently used, we return 1 if successful,
+   or 0 if we couldn't find a spill reg and we didn't change anything.  */
+
+static int
+allocate_reload_reg_from_free (r, insn)
+     int r;
+     rtx insn;
+{
+  int regno;
+  int class = (int) reload_reg_class[r];
+
+  /* Since we do not use round-robin register selection here, I think
+     the two-pass scheme wouldn't yield a considerable benefit in
+     register reuse. */
+  for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
+    if (reload_reg_free_p (regno, reload_opnum[r], reload_when_needed[r])
+        && TEST_HARD_REG_BIT (reg_class_contents[class], regno)
+        && HARD_REGNO_MODE_OK (regno, reload_mode[r]))
+      {
+        int nr = HARD_REGNO_NREGS (regno, reload_mode[r]);
+
+        /* Check that as many consecutive regs as we need
+           are available here. */
+        while (nr > 1)
+          {
+            int i = regno + nr - 1;
+            if (!(TEST_HARD_REG_BIT (reg_class_contents[class], i)
+        	  && reload_reg_free_p (i, reload_opnum[r],
+        				reload_when_needed[r])))
+              break;
+            nr--;
+          }
+
+        if (nr == 1)
+          {
+	    /* Detect when the reload reg can't hold the reload mode. */
+	    enum machine_mode test_mode = VOIDmode;
+	    if (reload_in[r])
+	      test_mode = GET_MODE (reload_in[r]);
+	    if (! (reload_in[r] != 0 && test_mode != VOIDmode
+		   && ! HARD_REGNO_MODE_OK (regno, test_mode)))
+	      if (! (reload_out[r] != 0
+		     && ! HARD_REGNO_MODE_OK (regno, GET_MODE (reload_out[r]))))
+		{
+		  /* The reg is OK.  */
+		  mark_reload_reg_in_use (regno, reload_opnum[r],
+					  reload_when_needed[r], reload_mode[r]);
+	
+                  nr = HARD_REGNO_NREGS (regno, reload_mode[r]);
+                  while (--nr >= 0)
+                    SET_HARD_REG_BIT (used_free_regs, regno + nr);
+                       
+		  reload_reg_rtx[r] = gen_rtx (REG, reload_mode[r], regno);
+		  return 1;
+		}
+	  }
+      }
+    
+  return 0;
+}
+#endif /* SMARTER_RELOAD_PASS */
+

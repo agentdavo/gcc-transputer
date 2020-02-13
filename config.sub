@@ -135,6 +135,7 @@ case $basic_machine in
 		| alpha | we32k | ns16k | clipper | sparclite | i370 | sh \
 		| powerpc | powerpcle | sparc64 | 1750a | dsp16xx | mips64 | mipsel \
 		| pdp11 | mips64el | mips64orion | mips64orionel \
+		| t800 | t9000 \
 		| sparc)
 		basic_machine=$basic_machine-unknown
 		;;
@@ -655,6 +656,9 @@ case $os in
 		;;
 	-osf*)
 		os=-osf
+		;;
+	-parix*)
+		os=-parix
 		;;
 	-utek*)
 		os=-bsd

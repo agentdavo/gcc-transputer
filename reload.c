@@ -5582,6 +5582,18 @@ find_equiv_reg (goal, insn, class, other, reload_reg_p, goalreg, mode)
   while (1)
     {
       p = PREV_INSN (p);
+
+#ifdef INSN_CLOBBERS_REGNO_P
+      /* We must check WHERE also: think of the case where WHERE is a
+         `store' insn popping its stack-reg source. */
+         
+      if ((valueno >= 0 && valueno < FIRST_PSEUDO_REGISTER
+	  && INSN_CLOBBERS_REGNO_P (p, valueno))
+	  || (regno >= 0 && regno < FIRST_PSEUDO_REGISTER
+	  && INSN_CLOBBERS_REGNO_P (p, regno)))
+	return 0;
+#endif
+
       if (p == where)
 	return value;
 
@@ -5601,14 +5613,6 @@ find_equiv_reg (goal, insn, class, other, reload_reg_p, goalreg, mode)
 #ifdef NON_SAVING_SETJMP 
       if (NON_SAVING_SETJMP && GET_CODE (p) == NOTE
 	  && NOTE_LINE_NUMBER (p) == NOTE_INSN_SETJMP)
-	return 0;
-#endif
-
-#ifdef INSN_CLOBBERS_REGNO_P
-      if ((valueno >= 0 && valueno < FIRST_PSEUDO_REGISTER
-	  && INSN_CLOBBERS_REGNO_P (p, valueno))
-	  || (regno >= 0 && regno < FIRST_PSEUDO_REGISTER
-	  && INSN_CLOBBERS_REGNO_P (p, regno)))
 	return 0;
 #endif
 

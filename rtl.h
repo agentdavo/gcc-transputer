@@ -966,3 +966,8 @@ extern rtx *regno_reg_rtx;
    know what `enum tree_code' means.  */
 
 extern int rtx_to_tree_code	PROTO((enum rtx_code));
+
+/* Nonzero after end of exotic pass.
+   Set to 1 or 0 by toplev.c.  */
+
+extern int exotic_completed;

@@ -2372,6 +2372,19 @@ for machine in $canon_build $canon_host $canon_target; do
 		cpu_type=we32k
 		use_collect2=yes
 		;;
+	t800-*-parix)
+		tm_file=t800/expert.h
+		tmake_file=t-parix
+		md_cppflags="-DMD_T800"
+		;;
+	t800-*-*)
+		md_cppflags="-DMD_T800"
+		;;
+	t9000-*-*)
+		cpu_type=t800
+		tm_file=t800/t9000.h
+		md_cppflags="-DMD_T9000"
+		;;
 	*)
 		echo "Configuration $machine not supported" 1>&2
 		exit 1
@@ -2789,15 +2802,19 @@ MAYBE_TARGET_DEFAULT = -DTARGET_CPU_DEFAULT=$target_cpu_default\\
 	else
 		rm -f Makefile.xx
 	  	(if [ x$host = x$build ] ; then
-			echo "MD_DEPS = $(md_file) cpp" ; echo "MD_CPP = ./cpp"
+			echo "MD_DEPS = \$(MD_PRE_CPP) cpp"
+			echo "MD_CPP = ./cpp"
 		else
-			echo "MD_DEPS = md.pre-cpp" ; echo "MD_CPP = \$(HOST_CC) -x c -E"
+			echo "MD_DEPS = \$(MD_PRE_CPP)"
+			echo "MD_CPP = \$(HOST_CC) -x c -E"
 		fi
-		md_file=md
-		echo "MD_CPPFLAGS = $md_cppflags") | \
-		  cat - Makefile.tem | sed -e "s|^MD_FILE[ 	]*=.*|MD_FILE = md|" > Makefile.xx
+		echo "MD_CPPFLAGS = $md_cppflags"
+		echo "MD_PRE_CPP = $srcdir/config/$md_file") | \
+		  cat - Makefile.tem | \
+		  sed -e "s|^MD_FILE[ 	]*=.*|MD_FILE = md|" > Makefile.xx
 		rm -f Makefile.tem
 		mv Makefile.xx Makefile.tem
+		md_file=md
 	fi
 	
 	# If we have gas in the build tree, make a link to it.

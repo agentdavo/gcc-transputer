@@ -63,6 +63,7 @@ Boston, MA 02111-1307, USA.  */
 #include "regs.h"
 #include "hard-reg-set.h"
 #include "insn-config.h"
+#include "insn-attr.h"
 #include "recog.h"
 #include "output.h"
 
@@ -215,6 +216,19 @@ static char *reg_offset;
 
 short *reg_renumber;
 
+#ifdef HAVE_ATTR_popped_inputs
+
+/* If there is an insn which uses and pops a register, and the register
+   does not die in this insn, it must not be allocated for hard reg.
+   Let it be a stack slot, reloaded before use.
+   REG_POPPED_INPUT carries a status for such regs:
+   A value of 1 means that there is an insn that uses and pops this reg.
+   A value of 3 means that the reg does not die in that insn. */
+
+char *reg_popped_input;
+
+#endif
+
 /* Set of hard registers live at the current point in the scan
    of the instructions in a basic block.  */
 
@@ -270,6 +284,7 @@ static void mark_life		PROTO((int, enum machine_mode, int));
 static void post_mark_life	PROTO((int, enum machine_mode, int, int, int));
 static int no_conflict_p	PROTO((rtx, rtx, rtx));
 static int requires_inout	PROTO((char *));
+static int mark_popped_reg	PROTO((rtx, rtx));
 
 /* Allocate a new quantity (new within current basic block)
    for register number REGNO which is born at index BIRTH
@@ -457,6 +472,26 @@ local_alloc ()
   for (i = 0; i < max_regno; i++)
     reg_renumber[i] = -1;
 
+#ifdef HAVE_ATTR_popped_inputs
+
+  reg_popped_input = (char *) oballoc (max_regno * sizeof (char));
+  for (i = 0; i < max_regno; i++)
+    reg_popped_input[i] = 0;
+
+  {
+    rtx insn = basic_block_head[0];
+
+    while (1)
+      {
+        note_popped_inputs (insn, mark_popped_reg);
+	if (insn == basic_block_end[n_basic_blocks-1])
+	  break;
+	insn = NEXT_INSN (insn);
+      }
+  }
+
+#endif
+
   /* Determine which pseudo-registers can be allocated by local-alloc.
      In general, these are the registers used only in a single block and
      which only die once.  However, if a register's preferred class has only
@@ -471,7 +506,8 @@ local_alloc ()
     {
       if (reg_basic_block[i] >= 0 && reg_n_deaths[i] == 1
 	  && (reg_alternate_class (i) == NO_REGS
-	      || ! CLASS_LIKELY_SPILLED_P (reg_preferred_class (i))))
+	      || ! CLASS_LIKELY_SPILLED_P (reg_preferred_class (i)))
+	  && reg_popped_input[i] < 3)
 	reg_qty[i] = -2;
       else
 	reg_qty[i] = -1;
@@ -522,6 +558,32 @@ local_alloc ()
 #endif
     }
 }
+
+#ifdef HAVE_ATTR_popped_inputs
+
+/* Record information on the use of REG, which is a popped input of
+   INSN, in the vector REG_POPPED_INPUTS.
+   This is called by higher-order function NOTE_POPPED_INPUTS */
+
+static int
+mark_popped_reg (insn, reg)
+  rtx insn, reg;
+{
+  register regno;
+
+  if (GET_CODE (reg) == SUBREG)
+    regno = REGNO (SUBREG_REG (reg));
+  else
+    regno = REGNO (reg);
+    
+  reg_popped_input[regno] |= 1;
+  if (!find_regno_note (insn, REG_DEAD, regno))
+    reg_popped_input[regno] |= 3;
+
+  return 0;
+}
+
+#endif /* HAVE_ATTR_popped_inputs */
 
 /* Depth of loops we are in while in update_equiv_regs.  */
 static int loop_depth;
@@ -1213,6 +1275,9 @@ block_alloc (b)
 	      && insn_n_operands[insn_code_number] > 1
 	      && insn_operand_constraint[insn_code_number][0][0] == '='
 	      && insn_operand_constraint[insn_code_number][0][1] != '&'
+#ifdef DONT_TIE_REGS
+	      && 0
+#endif
 #else
 	      && GET_CODE (PATTERN (insn)) == SET
 	      && rtx_equal_p (SET_DEST (PATTERN (insn)), recog_operand[0])

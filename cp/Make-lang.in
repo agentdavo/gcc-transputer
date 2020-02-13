@@ -189,9 +189,9 @@ c++.stage4:
 # This target creates the files that can be rebuilt, but go in the
 # distribution anyway.  It then copies the files to the distdir directory.
 c++.distdir:
-	mkdir tmp/cp
-	cd cp ; $(MAKE) $(FLAGS_TO_PASS) $(CXX_FLAGS_TO_PASS) parse.c hash.h
-	cd cp; \
+	mkdir $(srcdir)/tmp/cp
+	cd $(srcdir)/cp ; $(MAKE) $(FLAGS_TO_PASS) $(CXX_FLAGS_TO_PASS) parse.c hash.h
+	cd $(srcdir)/cp; \
 	for file in *[0-9a-zA-Z+]; do \
 	  ln $$file ../tmp/cp >/dev/null 2>&1 || cp $$file ../tmp/cp; \
 	done
