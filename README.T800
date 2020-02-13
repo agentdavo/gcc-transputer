@@ -1,16 +1,19 @@
-T800 backend overview
----------------------
+Transputer backend overview
+---------------------------
 
-T800 support is not part of GCC distribution yet; instead, it is
-available as a patch against the "official" GCC 2.6.3 distribution
-(gcc-2.6.3.tar.gz).
+Transputer backend is not part of GCC distribution yet; instead, it is
+available as a patch against the "official" GCC 2.7.2 distribution
+(gcc-2.7.2.tar.gz).
 
-It allows one to build a cross compiler that runs on a host capable
-of running GCC in general and produces T800 assembly language output.
+It allows one to build a cross compiler that runs on a host capable of
+running GCC in general and produces transputer assembly language output.
 
 
 Features and peculiarities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * SUPPORTED: code generation for most (all?) 32-bit transputers
+   (t800, t805, t425, t9000, t450)
+
  * SUPPORTED: asm_operands.
 
  * SUPPORTED: floating point instructions.  However, no attempt is
@@ -22,10 +25,11 @@ Features and peculiarities
  * UNSUPPORTED: debugging info output.  Just not ripe enough for now.
 
  * if you want code quality to be any decent, compile with -O.  That's
-   because reload pass cannot do well on T800 without register life info.
-   Moreover, certain programs, notably those using asms with three
-   nontrivial input operands, might fail to compile unless optimization
-   is enabled (running out of spills in reload).  So do use -O.
+   because reload pass cannot do well for transputer without register
+   life info. Moreover, certain programs, notably those using asms
+   with three nontrivial input operands, might fail to compile unless
+   optimization is enabled (running out of spills in reload).  So do
+   use -O.
 
 
 Run-time models supported
@@ -50,6 +54,35 @@ for its numerous merits.
 
 The two models are very different, and hopefully solve most problems
 that might arise when porting GCC to other transputer-based platforms.
+
+
+Transputer-specific compiler options
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-mt800, -mt805, -mt425, -mt9000, -mt450
+
+   Run-time selection of target CPU type.  Default is the processor
+   type you give to configure when building the compiler.
+
+-mfpu, -mno-fpu
+-mfpentry, -mno-fpentry
+-mfpge, -mno-fpge
+-mpop, -mno-pop
+-mgtu, -mno-gtu
+-msixteen, -mno-sixteen
+-mxtend, -mno-xtend
+-mslmul, -mno-slmul
+
+   Switches that enable/disable use of certain CPU capabilities.  Each
+   of the -mtNNN target CPU selection options actually works by setting
+   certain combination of these.  Hope you don't want to fiddle with
+   them; but if you do, search config/t800.h for their meaning.
+
+-mshort16, -mshort32
+
+   Size for the "short int" type in bits.  Default is 16 on transputers
+   that have support for 16-bit memory access (ls/ss), 32 on transputers
+   that don't have it.  Specifying -mshort16 in the latter case results in
+   implementation of halfword stores using shift and byte store instructions.
 
 
 Random examples of inline assembly usage
@@ -192,10 +225,10 @@ Where to get T800 patches
 ~~~~~~~~~~~~~~~~~~~~~~~~~
  The most recent version is always at
 
-  ftp://ftp.botik.ru/pub/local/gcc-t800/
+  ftp://ftp.botik.ru/pub/local/gcc-t800/gcc-2.7.2
 
-The port as a diff against gcc-2.6.3 is in the file
-gcc-2.6.3-t800.NNN.dif.gz, where NNN is the alpha release number.
+The port as a diff against gcc-2.7.2 is in the file
+gcc-2.7.2-t800.NNN.dif.gz, where NNN is the alpha release number.
 You most probably want to pick the largest numbered one.
 
 patchNNN.gz contains patches from alpha release MMM to alpha release
@@ -220,16 +253,21 @@ Alternatively, contact me directly: Yury Shevchuk <sizif@botik.ru>
 
 Installation
 ~~~~~~~~~~~~
- (1) Apply T800 patches to the stock GCC 2.6.3 distribution:
+ (1) Apply T800 patches to the stock GCC distribution:
 
-	cd gcc-2.6.3
-	gzip -dc gcc-2.6.3-t800.NNN.dif.gz | patch -p1
+	cd gcc-2.7.2
+	gzip -dc gcc-2.7.2-t800.3.dif.gz | patch -p1
 
  (2) Configure the sources for the target of your choice.
 
-     Example 1: configure for `generic' model
+     Example 1: configure for `generic' model.  This is what you need
+        if you are going to use gcc-t800 with TTOOLS.
 
 	./configure --target=t800
+
+        Note: this chooses t800 as the default CPU type.  You can
+        however use the compiler thus built for other cpu types
+        by running `gcc -mt425', for example.
 
      Example 2: configure for `expert' model
 
@@ -272,4 +310,4 @@ Acknowledgements
 
 
 
-$Revision: 1.11 $
+$Revision: 1.12 $

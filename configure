@@ -2375,15 +2375,26 @@ for machine in $canon_build $canon_host $canon_target; do
 	t800-*-parix)
 		tm_file=t800/expert.h
 		tmake_file=t-parix
-		md_cppflags="-DMD_T800"
+		target_cpu_default=800
 		;;
 	t800-*-*)
-		md_cppflags="-DMD_T800"
+		target_cpu_default=800
+		;;
+	t805-*-*)
+		cpu_type=t800
+		target_cpu_default=805
+		;;
+	t425-*-*)
+		cpu_type=t800
+		target_cpu_default=425
+		;;
+	t450-*-*)
+		cpu_type=t800
+		target_cpu_default=450
 		;;
 	t9000-*-*)
 		cpu_type=t800
-		tm_file=t800/t9000.h
-		md_cppflags="-DMD_T9000"
+		target_cpu_default=9000
 		;;
 	*)
 		echo "Configuration $machine not supported" 1>&2

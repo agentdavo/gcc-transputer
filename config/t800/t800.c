@@ -839,12 +839,12 @@ wsub_scale_operand (op, mode)
           || GET_MODE (op) == VOIDmode))
     switch (INTVAL (op))
       {
+      case UNITS_PER_WORD/2:
+	if (! TARGET_HAVE_SIXTEEN)
+	  break;
+	/* fall through */
       case UNITS_PER_WORD:
       case UNITS_PER_WORD*2:
-#ifdef HAVE__ss /* Should be HAVE__ssub, but we don't have a separate
-                   insn for it */
-      case UNITS_PER_WORD/2:
-#endif
         return 1;
       }
   return 0;
@@ -1111,50 +1111,42 @@ t800_expand_compare (cond, out_reg)
 
       case GE:  /* (reversed) gt; eqc 0 */
       case LT:  /* (reversed) gt */
-#ifdef HAVE__fpge
-	if (t800_compare.fp)
+	if (TARGET_HAVE_FPGE && t800_compare.fp)
 	  {
 	    emit_insn (gen__fpge (*out_reg, op[0], op[1]));
 	    return (cond != GE);
 	  }
-#endif
         emit_insn ((*gen_gt) (*out_reg, op[1], op[0]));
         return (cond != LT);
 
       case GT:  /* gt */
       case LE:  /* gt; eqc 0 */
-#ifdef HAVE__fpge
-	if (t800_compare.fp)
+	if (TARGET_HAVE_FPGE && t800_compare.fp)
 	  {
 	    emit_insn (gen__fpge (*out_reg, op[1], op[0]));
 	    return (cond != LE);
 	  }
-#endif
         emit_insn ((*gen_gt) (*out_reg, op[0], op[1]));
         return (cond != GT);
 
       case GEU: /* ldiff; eqc 0 */
       case LTU: /* ldiff */
-#ifdef HAVE__gtu
-	if (! t800_compare.fp)
+	if (TARGET_HAVE_GTU && ! t800_compare.fp)
 	  {
 	    emit_insn (gen__gtu (*out_reg, op[1], op[0]));
 	    return (cond != LTU);
 	  }
-#endif
         emit_insn (gen__ldiff (*out_reg, gen_reg_rtx (SImode),
                                op[0], op[1], force_reg (SImode, GEN_INT (0))));
         return (cond != LTU);
 
       case GTU: /* (reversed) ldiff */
       case LEU: /* (reversed) ldiff; eqc 0 */
-#ifdef HAVE__gtu
-	if (! t800_compare.fp)
+	if (TARGET_HAVE_GTU && ! t800_compare.fp)
 	  {
 	    emit_insn (gen__gtu (*out_reg, op[0], op[1]));
 	    return (cond != GTU);
 	  }
-#endif
         emit_insn (gen__ldiff (*out_reg, gen_reg_rtx (SImode),
                                op[1], op[0], force_reg (SImode, GEN_INT (0))));
         return (cond != GTU);
@@ -1200,9 +1192,10 @@ int
 t800_fp_reg_p (x)
     rtx x;
 {
-  return ((GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT
-	   || GET_MODE_CLASS (GET_MODE (x)) == MODE_COMPLEX_FLOAT)
+  return (TARGET_HAVE_FPU
 	  && GET_CODE (x) == REG
+          && (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT
+	      || GET_MODE_CLASS (GET_MODE (x)) == MODE_COMPLEX_FLOAT)
 	  && (REGNO (x) >= FIRST_PSEUDO_REGISTER
 	      || FP_REGNO_P (REGNO (x))));
 }
@@ -1453,8 +1446,7 @@ emit_t800_insns (str, st)
     switch (*str++)
       {
       case 'd':
-#ifdef HAVE__pop
-	if (HAVE__pop)
+	if (TARGET_HAVE_POP)
 	  {
 	    /* Use the T805 insn to drop the reg at stack top */
 	    pattern = gen__pop (hard_reg[STACK_REG_FIRST(ABC_STACKNO)][SImode]);
@@ -1462,14 +1454,12 @@ emit_t800_insns (str, st)
 	    break;
 	  }
 	else
-#else
 	  {
-	    /* Drop is just like a store except the stack offset used,
-	       for it not to conflict with load/store.  */
+	    /* Drop is just like a store except we use a different
+	       stack offset to avoid the conflict with load/store.  */
 	    offset = -5 * UNITS_PER_WORD;
 	    goto store;
 	  }
-#endif
 
       case 's':
         /* Store a reg temporarily; it will be loaded back to stack

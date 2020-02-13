@@ -21,9 +21,9 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-/* This file is laid out along the manual (tm.texi), and is
-   supposed to be read with the printed manual in hand. Therefore
-   it contains no common comments, just t800-specific ones. */
+/* This file is laid out along the manual (tm.texi), and is supposed
+   to be read with printed manual in hand. Therefore it contains no
+   common comments, just transputer-specific ones. */
 
 
 /*************************************************************
@@ -59,67 +59,175 @@ Boston, MA 02111-1307, USA.  */
  Run-time Target Specification
 *************************************************************/
 
-#define CPP_PREDEFINES  "-Dt800"
+#define STRINGIFY(S)  STRINGIFY1(S)
+#define STRINGIFY1(S)  #S
+#define CPP_PREDEFINES  "-Dt" STRINGIFY(TARGET_CPU_DEFAULT)
 
 /* #define STDC_VALUE */
 
 extern int target_flags;
 
+/* configure can set this using -D in CFLAGS */
+#ifndef TARGET_CPU_DEFAULT
+#define TARGET_CPU_DEFAULT 800
+#endif
+
+#if TARGET_CPU_DEFAULT == 800
+#define MASK_CPU_DEFAULT  MASK_CPU_CAPABILITIES_T800
+#elif TARGET_CPU_DEFAULT == 805
+#define MASK_CPU_DEFAULT  MASK_CPU_CAPABILITIES_T805
+#elif TARGET_CPU_DEFAULT == 425
+#define MASK_CPU_DEFAULT  MASK_CPU_CAPABILITIES_T425
+#elif TARGET_CPU_DEFAULT == 450
+#define MASK_CPU_DEFAULT  MASK_CPU_CAPABILITIES_T450
+#elif TARGET_CPU_DEFAULT == 9000
+#define MASK_CPU_DEFAULT  MASK_CPU_CAPABILITIES_T9000
+#else
+#error "Improper value for TARGET_CPU_DEFAULT.  Someone improved configure?"
+#endif
+
+/* Processor type to capabilities mask mapping */
+
+#define MASK_CPU_CAPABILITIES_T800 \
+  (MASK_HAVE_FPU | MASK_HAVE_FPENTRY)
+
+#define MASK_CPU_CAPABILITIES_T805 \
+  (MASK_HAVE_FPU | MASK_HAVE_FPENTRY | MASK_HAVE_POP)
+
+#define MASK_CPU_CAPABILITIES_T425 \
+  (MASK_HAVE_POP)
+
+#define MASK_CPU_CAPABILITIES_T450 \
+  (MASK_HAVE_POP | MASK_HAVE_GTU | MASK_HAVE_SIXTEEN \
+   | MASK_HAVE_XTEND | MASK_HAVE_SLMUL)
+
+#define MASK_CPU_CAPABILITIES_T9000 \
+  (MASK_HAVE_FPU | MASK_HAVE_POP | MASK_HAVE_GTU \
+   | MASK_HAVE_XTEND | MASK_HAVE_SIXTEEN)
+
+#define MASK_CPU_CAPABILITIES_ALL \
+  (0			\
+   | MASK_HAVE_FPU	\
+   | MASK_HAVE_FPENTRY	\
+   | MASK_HAVE_FPGE	\
+   | MASK_HAVE_POP	\
+   | MASK_HAVE_GTU	\
+   | MASK_HAVE_SIXTEEN	\
+   | MASK_HAVE_XTEND	\
+   | MASK_HAVE_SLMUL	\
+  )
+
+/* Masks for the -m switches */
+
+#define MASK_USE_cmpqi			000000000001
+#define MASK_DATASEG_PC_RELATIVE	000000000002
+#define MASK_SHORT16			000000000004
+#define MASK_SHORT32			000000000010
+/* processor capabilities */
+#define MASK_HAVE_FPU			000000001000
+#define MASK_HAVE_FPENTRY		000000002000
+#define MASK_HAVE_FPGE			000000004000
+#define MASK_HAVE_POP			000000010000
+#define MASK_HAVE_GTU			000000020000
+#define MASK_HAVE_SIXTEEN		000000040000
+#define MASK_HAVE_XTEND			000000100000
+#define MASK_HAVE_SLMUL			000000200000
+
 /* Debugging: enable cmpqi pattern */
 
-#define MASK_USE_cmpqi	(000000000001)
 #define TARGET_USE_cmpqi   (target_flags & MASK_USE_cmpqi)
 
 /* Data segment access relative to PC (ldc/ldpi/ldnl) as opposed to
    access via pointer to the data segment start (ldl/ldnl) */
 
-#define MASK_DATASEG_PC_RELATIVE  (000000000002)
 #define TARGET_DATASEG_PC_RELATIVE  (target_flags & MASK_DATASEG_PC_RELATIVE)
-#define TARGET_DATASEG_BY_POINTER  ((target_flags & MASK_DATASEG_PC_RELATIVE) == 0)
+#define TARGET_DATASEG_BY_POINTER  (! TARGET_DATASEG_PC_RELATIVE)
 
-/* Consider short ints 16-bit wide.  Worse code but closer to traditions. */
+/* Make short ints 16-bit wide.  This is closer to traditions, but
+   gives inefficient code if the target lacks 16-bit operation support */
 
-#define MASK_SHORT16  (000000000004)
-#define TARGET_SHORT16  (target_flags & MASK_SHORT16)
+#define TARGET_SHORT16 \
+  (target_flags & MASK_SHORT16 \
+   || (target_flags & (MASK_SHORT32|MASK_HAVE_SIXTEEN) == MASK_HAVE_SIXTEEN))
 
-/* On transputers that have 16-bit memory access support we enable
-   16-bit shorts by default */
+/* Target has FP support at all (there are fp-registers) */
 
-#ifdef HAVE_HALFWORD_LOAD_STORE
-#define TARGET_SHORT16_DEFAULT  MASK_SHORT16
-#else
-#define TARGET_SHORT16_DEFAULT  0
-#endif
+#define TARGET_HAVE_FPU  (target_flags & MASK_HAVE_FPU)
 
-/* Assume the target transputer has the `pop' instruction */
+/* Target has the indirect fpu* instructions -- t800,t805.  The
+   absence of this bit means the direct counterparts of the fpu*
+   instructions are available -- t9000 */
 
-#define MASK_HAVE_POP  (000000000010)
+#define TARGET_HAVE_FPENTRY  (target_flags & MASK_HAVE_FPENTRY)
+
+/* Target has the fpge instruction */
+
+#define TARGET_HAVE_FPGE  (target_flags & MASK_HAVE_FPGE)
+
+/* Target has the pop instruction */
+
 #define TARGET_HAVE_POP  (target_flags & MASK_HAVE_POP)
 
-#ifdef HAVE_POP
-#define TARGET_HAVE_POP_DEFAULT  MASK_HAVE_POP
-#else
-#define TARGET_HAVE_POP_DEFAULT  0
-#endif
+/* Target has the gtu instruction */
+
+#define TARGET_HAVE_GTU  (target_flags & MASK_HAVE_GTU)
+
+/* Target has the quick sign extension instructions (xbword, lbx,
+   (and if HAVE_SIXTEEN) xsword, lsx)  */
+
+#define TARGET_HAVE_XTEND  (target_flags & MASK_HAVE_XTEND)
+
+/* Target has the 16-bit load/store/subscript instructions
+   (ls,ss,ssub) -- t9000, t450 */
+
+#define TARGET_HAVE_SIXTEEN  (target_flags & MASK_HAVE_SIXTEEN)
+
+/* Target has signed long multiplication (slmul, sulmul) -- t450 */
+
+#define TARGET_HAVE_SLMUL  (target_flags & MASK_HAVE_SLMUL)
 
 
 #define TARGET_SWITCHES_DEFAULT \
- ( 0 \
+  (0 \
    | MASK_USE_cmpqi \
    | MASK_DATASEG_PC_RELATIVE \
-   | TARGET_SHORT16_DEFAULT \
-   | TARGET_HAVE_POP_DEFAULT \
- )
+   | MASK_CPU_DEFAULT \
+  )
 
 #define TARGET_SWITCHES \
   {{"no-cmpqi",			-MASK_USE_cmpqi},		\
    {"dataseg-pc-relative",	+MASK_DATASEG_PC_RELATIVE},	\
    {"dataseg-by-pointer",	-MASK_DATASEG_PC_RELATIVE},	\
+   {"short16",			-MASK_SHORT32},			\
    {"short16",			+MASK_SHORT16},			\
    {"short32",			-MASK_SHORT16},			\
-   {"t805",			+MASK_HAVE_POP},		\
-   {"have-pop",			+MASK_HAVE_POP},		\
-   {"no-have-pop",		-MASK_HAVE_POP},		\
+   {"short32",			+MASK_SHORT32},			\
+   {"t800", 			-MASK_CPU_CAPABILITIES_ALL},	\
+   {"t800", 			+MASK_CPU_CAPABILITIES_T800},	\
+   {"t805", 			-MASK_CPU_CAPABILITIES_ALL},	\
+   {"t805", 			+MASK_CPU_CAPABILITIES_T805},	\
+   {"t425", 			-MASK_CPU_CAPABILITIES_ALL},	\
+   {"t425", 			+MASK_CPU_CAPABILITIES_T425},	\
+   {"t450", 			-MASK_CPU_CAPABILITIES_ALL},	\
+   {"t450", 			+MASK_CPU_CAPABILITIES_T450},	\
+   {"t9000", 			-MASK_CPU_CAPABILITIES_ALL},	\
+   {"t9000", 			+MASK_CPU_CAPABILITIES_T9000},	\
+   {"fpu",			+MASK_HAVE_FPU},		\
+   {"no-fpu",			-MASK_HAVE_FPU},		\
+   {"fpentry",			+MASK_HAVE_FPENTRY},		\
+   {"no-fpentry",		-MASK_HAVE_FPENTRY},		\
+   {"fpge",			+MASK_HAVE_FPGE},		\
+   {"no-fpge",			-MASK_HAVE_FPGE},		\
+   {"pop",			+MASK_HAVE_POP},		\
+   {"no-pop",			-MASK_HAVE_POP},		\
+   {"gtu",			+MASK_HAVE_GTU},		\
+   {"no-gtu",			-MASK_HAVE_GTU},		\
+   {"sixteen",			+MASK_HAVE_SIXTEEN},		\
+   {"no-sixteen",		-MASK_HAVE_SIXTEEN},		\
+   {"xtend",			+MASK_HAVE_XTEND},		\
+   {"no-xtend",			-MASK_HAVE_XTEND},		\
+   {"slmul",			+MASK_HAVE_SLMUL},		\
+   {"no-slmul",			-MASK_HAVE_SLMUL},		\
    SUBTARGET_SWITCHES						\
    {"",  TARGET_SWITCHES_DEFAULT | SUBTARGET_SWITCHES_DEFAULT}}
 
@@ -130,7 +238,7 @@ extern int target_flags;
 #define SUBTARGET_SWITCHES_DEFAULT  0
 #define SUBTARGET_OPTIONS
 
-#define TARGET_VERSION fprintf (stderr, " (T800, AST syntax)");
+#define TARGET_VERSION fprintf (stderr, " (Transputer, TTOOLS syntax)");
 
 /* #define OVERRIDE_OPTIONS */
 /* #define OPTIMIZATION_OPTIONS(LEVEL) */
@@ -290,7 +398,16 @@ extern int target_flags;
 
 #define NON_SAVING_SETJMP  1
 
-/* -#define CONDITIONAL_REGISTER_USAGE */
+#define CONDITIONAL_REGISTER_USAGE \
+  if (! TARGET_HAVE_FPU) {				\
+      int i; 						\
+      HARD_REG_SET x;					\
+      COPY_HARD_REG_SET (x, reg_class_contents[(int)FLOAT_REGS]); \
+      for (i = 0; i < FIRST_PSEUDO_REGISTER; i++ )	\
+       if (TEST_HARD_REG_BIT (x, i)) 			\
+	 fixed_regs[i] = call_used_regs[i] = 1; 	\
+  }							\
+
 /* -#define INCOMING_REGNO (out) */
 /* -#define OUTGOING_REGNO (in) */
 
@@ -367,16 +484,16 @@ extern int target_flags;
    reg-stack top before executing the insn.  */
 
 #define STACK_REG_CLASS_FROM_LETTER(C) \
-  ((C) == 'r' ? GENERAL_REGS :  \
-   (C) == 'a' ? AREG :          \
-   (C) == 'b' ? BREG :          \
-   (C) == 'c' ? CREG :          \
-   (C) == 'f' ? FLOAT_REGS :    \
-   (C) == 't' ? FAREG :         \
-   (C) == 'u' ? FBREG :         \
-   (C) == 'v' ? FCREG :         \
-   (C) == 'U' ? AREG :          \
-   (C) == 'R' ? AREG :          \
+  ((C) == 'r' ? GENERAL_REGS :                 \
+   (C) == 'a' ? AREG :                         \
+   (C) == 'b' ? BREG :                         \
+   (C) == 'c' ? CREG :                         \
+   (C) == 'f' && TARGET_HAVE_FPU ? FLOAT_REGS :\
+   (C) == 't' && TARGET_HAVE_FPU ? FAREG :     \
+   (C) == 'u' && TARGET_HAVE_FPU ? FBREG :     \
+   (C) == 'v' && TARGET_HAVE_FPU ? FCREG :     \
+   (C) == 'U' ? AREG :                         \
+   (C) == 'R' ? AREG :                         \
    NO_REGS)
 
 /* The following two macros handle `extra operands' that some insns
@@ -496,8 +613,10 @@ enum reg_class
 #define INDEX_REG_CLASS  NO_REGS
 
 #define REG_CLASS_FROM_LETTER(C) \
-  ((C) == 'r' || (C) == 'a' || (C) == 'b' || (C) == 'c' ? GENERAL_REGS : \
-   (C) == 'f' || (C) == 't' || (C) == 'u' || (C) == 'v' ? FLOAT_REGS :   \
+  (((C) == 'r' || (C) == 'a' || (C) == 'b' || (C) == 'c')                    \
+     ? GENERAL_REGS :                                                        \
+   TARGET_HAVE_FPU && ((C) == 'f' || (C) == 't' || (C) == 'u' || (C) == 'v') \
+     ? FLOAT_REGS :                                                          \
    NO_REGS)
 
 #define REGNO_OK_FOR_INDEX_P(REGNO)  0
@@ -747,7 +866,7 @@ enum reg_class
    the stack.  So we tell calls.c to put all the parms onto the stack in
    this case.
 
-   Second, there may be a complex cases when we should pass some arg on
+   Second, there may be complex cases when we should pass some arg on
    the stack; in this case we pass all args on the stack to avoid the
    complexity.  This situation is detected by FUNCTION_ARG_PRESCAN and
    indicated by CUM.must_pass_in_stack.
@@ -877,17 +996,19 @@ typedef struct {
              || TREE_CODE (VALTYPE) == OFFSET_TYPE)                         \
             && TYPE_PRECISION (VALTYPE) < BITS_PER_WORD)                    \
            ? word_mode : TYPE_MODE (VALTYPE),                               \
-           TREE_CODE (VALTYPE) == REAL_TYPE ? R_FAREG : R_AREG)
+           TREE_CODE (VALTYPE) == (REAL_TYPE && TARGET_HAVE_FPU)            \
+                                  ? R_FAREG : R_AREG)
 
 /* - #define FUNCTION_OUTGOING_VALUE(@var{valtype}, @var{func}) */
 
 #define LIBCALL_VALUE(MODE) \
-  gen_rtx (REG, MODE, (GET_MODE_CLASS (MODE) == MODE_FLOAT                  \
-                       || GET_MODE_CLASS (MODE) == MODE_COMPLEX_FLOAT)      \
+  gen_rtx (REG, MODE, (TARGET_HAVE_FPU					    \
+                       && (GET_MODE_CLASS (MODE) == MODE_FLOAT              \
+                           || GET_MODE_CLASS (MODE) == MODE_COMPLEX_FLOAT)) \
                       ? R_FAREG : R_AREG)
 
 #define FUNCTION_VALUE_REGNO_P(REGNO) \
-  ((REGNO) == R_AREG || (REGNO) == R_FAREG)
+  ((REGNO) == R_AREG || (TARGET_HAVE_FPU && (REGNO) == R_FAREG))
 
 /* #define APPLY_RESULT_SIZE */
 
